@@ -18,7 +18,9 @@ The application uses an EC2 IAM role to access a private S3 media bucket and a s
 
 ## Delivery
 
-Milestone 0 CI validates only. Future deployment requires explicit owner approval, a protected environment, immutable build artifact, commit provenance, preflight/migration plan, post-deploy health check, and rollback. Pull requests never deploy production simply because they open.
+Milestone 0 CI validates only. Working branches target `dev`; after an owner-approved merge, the exact revision may later deploy to staging. Production candidates move by release PR from `dev` to `main`. Future production deployment requires full CI, an approved `main` revision, explicit owner approval, a protected `production` environment, immutable build artifact, commit provenance, preflight/migration plan, post-deploy health check, and rollback. Pull requests and `dev` never deploy production.
+
+GitHub-to-AWS authentication should use OIDC and a least-privilege deployment IAM role. Never provide production credentials to pull-request jobs or use the production EC2 application server as a general-purpose self-hosted runner.
 
 ## Data and Recovery
 
