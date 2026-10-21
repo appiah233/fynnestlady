@@ -1,0 +1,29 @@
+name: Bug report
+description: Report reproducible incorrect behavior without secrets or customer data
+title: "fix: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Safe reproduction and evidence
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Customer, commerce, security, and data impact
+    validations:
+      required: true

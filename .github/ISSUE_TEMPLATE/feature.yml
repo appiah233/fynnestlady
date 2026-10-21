@@ -1,0 +1,29 @@
+name: Feature proposal
+description: Propose a bounded customer or business outcome
+title: "feat: "
+labels: ["needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and user outcome
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Security, data, design, skincare-content, and operational risks
+    validations:
+      required: true

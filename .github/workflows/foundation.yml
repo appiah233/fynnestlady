@@ -1,0 +1,42 @@
+name: Foundation validation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Validate foundation
+        run: node scripts/validate-foundation.mjs
+      - name: Detect whitespace errors
+        run: git diff --check HEAD^ HEAD || git diff --check --cached
+
+  proposed-engineering-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Set up Node.js
+        if: ${{ hashFiles('package.json') != '' }}
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - if: ${{ hashFiles('package.json') != '' }}
+        run: npm ci
+      - if: ${{ hashFiles('package.json') != '' }}
+        run: npm run lint
+      - if: ${{ hashFiles('package.json') != '' }}
+        run: npm run typecheck
+      - if: ${{ hashFiles('package.json') != '' }}
+        run: npm test
+      - if: ${{ hashFiles('package.json') != '' }}
+        run: npm run build
