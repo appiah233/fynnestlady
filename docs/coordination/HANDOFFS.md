@@ -19,7 +19,7 @@ Completed: Required Milestone 0 artifacts and initial proposed ADR set.
 Evidence: `node scripts/validate-foundation.mjs`; `git diff --check`; Prettier YAML check; actionlint; repository scans; final Git status and commit SHA.  
 Tests: Documentation/governance validation passed; application tests not applicable at this milestone.  
 Risks: Technology versions, production database, authentication, legal/business rules, taxonomy, and infrastructure controls remain decisions—not verified implementation.  
-Blockers: GitHub lacks mandatory `dev` and `main`; `docs/project-foundation` became the default branch. Milestone 1 is blocked pending Eric's bootstrap decision and review/authorization.  
+Blockers: GitHub lacks mandatory `dev` and `main`; `docs/project-foundation` became the default branch. Milestone 1 is blocked pending Eric's bootstrap decision and review/authorization.
 Decisions required: D-001 through D-011 in `DECISIONS.md`.
 Next owner: Eric Appiah Owusu.  
 Next action: Review the pull request, request changes or approve direction, then explicitly authorize a bounded Milestone 1.
