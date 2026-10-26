@@ -77,7 +77,7 @@ jobs:
           path: candidate
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093a
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: bot-failure-${{ github.run_id }}
           path: .bot
@@ -134,7 +134,7 @@ jobs:
           path: candidate
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093a
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: bot-remediation-${{ github.run_id }}
           path: bot-artifact
@@ -176,7 +176,7 @@ jobs:
           path: candidate
           token: ${{ steps.app.outputs.token }}
           persist-credentials: true
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093a
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: bot-remediation-${{ github.run_id }}
           path: bot-artifact
