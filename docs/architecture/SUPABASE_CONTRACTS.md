@@ -25,3 +25,7 @@ The server must verify a customer's identity and resource ownership before using
 CommerceAgent owns transactional checkout, immutable order enforcement, state transitions, inventory reservation/finalization, and subtotal reconciliation. PaymentsAgent owns verified Paystack events and reconciliation. SecurityAgent reviews grants and RLS, including negative cross-customer tests. AdminAgent cannot write through browser roles. Address shape, shipping/tax policy, and catalogue claim rules need ProductAgent decisions before checkout or publication.
 
 Migration is additive. For a local disposable database it can be dropped wholesale; deployed environments need a forward migration rather than editing the applied file. No production migration is authorized by this branch.
+
+## Independent local SQL check
+
+Use a fresh disposable PostgreSQL database. Its owner runs `supabase/tests/bootstrap_local.sql`, then `supabase/migrations/20261026160000_domain_foundation.sql`, then `supabase/tests/domain_foundation.sql`, each with `psql -X -v ON_ERROR_STOP=1 -f <path>`. Before the test script, grant `authenticated` to the database owner so it can `SET ROLE authenticated`. The bootstrap is only a minimal Supabase Auth stub and must never be applied to Supabase. The test transaction rolls back its fixtures. A real local Supabase verification is still required for platform-specific behavior.

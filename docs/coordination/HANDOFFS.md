@@ -2,6 +2,16 @@
 
 Handoff entries are append-only.
 
+## 2026-10-26T16:27:00Z DatabaseAgent follow-up
+
+Task ID: SPRINT1-DATABASE-001 / GitHub issue #9
+Branch: feature/9-supabase-foundation
+Status: Security review remediation added.
+Completed: Expanded negative SQL tests for anonymous denial, both customer order directions, and both customer profile/cart/item isolation. Added disposable PostgreSQL bootstrap fixture for independent reruns.
+Evidence: Updated `domain_foundation.sql` passed with `ON_ERROR_STOP=1` on disposable PostgreSQL 18; transaction rolled back. Local Supabase verification has not run.
+Tests: DB-03 immutable snapshots, DB-04 concurrent stock, and DB-05 duplicate payment effects remain pending downstream CommerceAgent/PaymentsAgent implementation.
+Next owner: SecurityAgent and TestingAgent for independent review.
+
 ## 2026-10-26T16:05:00Z DatabaseAgent
 
 Task ID: SPRINT1-DATABASE-001 / GitHub issue #9
