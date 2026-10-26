@@ -62,7 +62,7 @@ async function api(path, { method = 'GET', body, headers = {} } = {}) {
 async function branch(name) { return api(`branches/${encodeURIComponent(name)}`); }
 async function checksFor(sha) {
   const checks = await api(`commits/${sha}/check-runs?per_page=100`);
-  return Object.fromEntries((checks.check_runs || []).map(c => [c.name, c.status === 'completed' ? c.conclusion : c.status]));
+  return Object.fromEntries((checks.check_runs || []).map(c => [c.name, c.conclusion || c.status]));
 }
 async function ensureHealthyDev() {
   const b = await branch('dev');

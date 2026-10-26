@@ -125,12 +125,12 @@ jobs:
             const response = await fetch(url, { headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json' } });
             if (!response.ok) throw new Error(`Cannot read check runs: ${response.status}`);
             runs = (await response.json()).check_runs || [];
-            if (names.every(name => runs.some(item => item.name === name && item.status === 'completed' && item.conclusion === 'success'))) break;
-            if (runs.some(item => names.includes(item.name) && item.status === 'completed' && item.conclusion !== 'success')) break;
+            if (names.every(name => runs.some(item => item.name === name && item.conclusion === 'success'))) break;
+            if (runs.some(item => names.includes(item.name) && item.conclusion && item.conclusion !== 'success')) break;
             await new Promise(r => setTimeout(r, 5000));
           }
           const evidence = names.map(name => {
-            const run = runs.find(item => item.name === name && item.status === 'completed' && item.conclusion === 'success');
+            const run = runs.find(item => item.name === name && item.conclusion === 'success');
             if (!run) throw new Error(`Required successful check missing: ${name}`);
             return { name, url: run.html_url, sha: process.env.BOT_HEAD_SHA };
           });
