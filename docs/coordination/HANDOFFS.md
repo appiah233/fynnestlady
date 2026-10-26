@@ -2,6 +2,28 @@
 
 Handoff entries are append-only.
 
+## 2026-10-26T16:05:00Z DatabaseAgent
+
+Task ID: SPRINT1-DATABASE-001 / GitHub issue #9
+Branch: feature/9-supabase-foundation
+Role: Supabase domain foundation owner
+Objective: Publish initial commerce relational and RLS contracts.
+Business outcome: Commerce and frontend specialists have explicit entity, price, visibility, and ownership boundaries.
+Scope: Additive migration, disposable SQL tests, and data contract.
+Non-goals: Deployed schema, final checkout logic, admin role model, Paystack integration.
+Files expected: supabase/**, docs/architecture/SUPABASE_CONTRACTS.md, coordination entries.
+Dependencies: SecurityAgent RLS review; CommerceAgent transaction design; ProductAgent delivery/tax decisions.
+Conflicts checked: Isolated worktree, no shared file edits outside coordination.
+Status: Implemented; awaiting independent review and CI.
+Completed: Product/variant, inventory, profile, cart, order snapshot, payment tables; checks, FKs, indexes, deny-by-default RLS.
+Evidence: Migration applied to disposable PostgreSQL 18 with Supabase auth stubs; test transaction passed and rolled back; `git diff --check` passed.
+Tests: `psql -v ON_ERROR_STOP=1 -f supabase/tests/domain_foundation.sql` covers draft visibility, cross-customer order isolation, browser privilege denial, money totals, over-reservation, and negative price.
+Risks: Current migration does not encode full checkout atomicity, immutable order enforcement against service-role misuse, or admin authorization. Those require subsequent Commerce/Security design and tests.
+Blockers: None for branch review; no Supabase environment available for platform-specific verification.
+Decisions required: Delivery/tax/address policy before live checkout.
+Next owner: SecurityAgent and independent TestingAgent.
+Next action: Review SQL/RLS, run migration against local Supabase, and design transactional commerce functions.
+
 ## 2026-10-21T16:22:55Z Codex
 
 Task ID: M0-FOUNDATION-001  

@@ -1,5 +1,19 @@
 # Active Work
 
+## 2026-10-26T15:52:40Z DatabaseAgent
+
+Task ID: SPRINT1-DATABASE-001
+Branch: feature/9-supabase-foundation
+Role: Supabase domain foundation owner
+Objective: Establish the minimal catalogue, inventory, cart, order, and payment relational contracts with deny-by-default RLS.
+Business outcome: Subsequent commerce and storefront work can consume stable, safe data contracts.
+Scope: supabase/** and data contract documentation.
+Non-goals: Live data, production migration, Paystack implementation, or customer-facing UI.
+Files expected: supabase/migrations/**, supabase/tests/**, docs/architecture/SUPABASE_CONTRACTS.md.
+Dependencies: User-approved Supabase stack, SecurityAgent RLS review, CommerceAgent order workflow.
+Conflicts checked: Isolated worktree from dev; no existing Supabase files.
+Status: In progress.
+
 ## 2026-10-21T16:22:55Z Codex
 
 Task ID: M0-FOUNDATION-001  
