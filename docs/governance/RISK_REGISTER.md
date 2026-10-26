@@ -14,3 +14,5 @@
 | R-010 | Supply-chain or CI compromise alters releases | Medium | High | Pinned actions, least privilege, review dependency changes | Security | Open |
 | R-011 | Premature technology lock-in | Medium | Medium | Proposed ADR status and Milestone 1 validation spikes | Architecture | Open |
 | R-012 | Incomplete catalogue data produces misleading UI | High | High | Required-field policy, draft state, human verification | Product | Open |
+| R-013 | Documented branch controls are not enabled in GitHub | High | High | Owner verifies rulesets for `dev` and `main`, required checks, deletion/force-push prevention | Owner/Security | Open |
+| R-014 | PR or self-hosted CI exposes production credentials | Medium | Critical | GitHub-hosted runners, no PR secrets, OIDC, protected environments, scoped IAM | Security | Open |

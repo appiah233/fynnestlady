@@ -34,6 +34,9 @@ Before implementation, define the problem and current state; identify scope, non
 - Never rewrite working architecture without an accepted reason and ADR.
 - Never hide errors, weaken tests, or suppress security controls to obtain a green status.
 - Do not build directly on `main`.
+- `main` is the production branch; `dev` is the integration branch.
+- Working branches normally target `dev`; reviewed release pull requests promote `dev` to `main`.
+- Agents and bots may not merge, squash-merge, rebase-merge, enable auto-merge, force-push, or silently promote either permanent branch.
 
 ## Evidence
 
@@ -67,3 +70,5 @@ DatabaseAgent reviews material schema changes. Migrations require safety and rol
 ## Deployment
 
 No deployment from an unreviewed pull request. No autonomous production deployment without explicit owner authorization.
+
+Production candidates originate only from approved `main` revisions through a protected production environment with explicit owner deployment approval. Pull-request code and the production EC2 host must never serve as a general-purpose CI runner with production credentials.

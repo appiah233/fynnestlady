@@ -1,6 +1,6 @@
 # Initial Roadmap
 
-Every milestone follows the building memo, project governance, required specialist reviews, and owner gates.
+Every milestone follows the building memo, project governance, `docs/governance/BRANCHING_AND_DELIVERY.md`, required specialist reviews, and owner gates.
 
 1. **Foundation:** business, brand, governance, coordination, architecture, domain/data/security/design direction, testing, GitHub workflow, and PR inspection.
 2. **Engineering foundation:** verify current secure versions; initialize Next.js/TypeScript/Tailwind; tokens/components; environment validation; data tooling; tests; observability; health endpoint.
