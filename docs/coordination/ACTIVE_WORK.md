@@ -21,3 +21,18 @@ Blockers: None.
 Decisions required: See `DECISIONS.md`.  
 Next owner: Eric Appiah Owusu.  
 Next action: Review the foundation PR and pending decisions; do not begin Milestone 1 until authorized.
+
+## 2026-10-26T15:59:12Z SecurityAgent
+
+Task ID: S1-SEC (#11)
+Branch: security/11-baseline
+Role: Security baseline owner
+Objective: Define Supabase role, RLS, secret, environment and authentication controls.
+Business outcome: Deny cross-customer and unauthorized administration access.
+Scope: docs/architecture/SECURITY_BASELINE.md.
+Non-goals: Implementing database policies or production credentials.
+Files expected: docs/architecture/SECURITY_BASELINE.md.
+Dependencies: DatabaseAgent RLS contract; TestingAgent verification.
+Conflicts checked: Isolated worktree from dev; no shared file edits.
+Status: In review; PR #13.
+
