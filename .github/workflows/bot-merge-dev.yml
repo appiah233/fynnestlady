@@ -9,11 +9,7 @@ on:
         description: PR targeting dev
         required: true
         type: number
-permissions:
-  actions: read
-  contents: write
-  pull-requests: write
-  issues: write
+permissions: {}
 env:
   FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
   FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
@@ -22,21 +18,44 @@ concurrency:
   cancel-in-progress: false
 jobs:
   merge:
-    if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') }}
+    if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.path == '.github/workflows/evidence-publisher.yml' && github.event.workflow_run.head_repository.full_name == github.repository)) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      actions: read
+      checks: read
+      contents: write
+      pull-requests: write
+      issues: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: dev
           persist-credentials: false
+      - name: Resolve evidence run ID
+        id: source_run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          INPUT_PR: ${{ inputs.pr_number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            echo "run_id=$WORKFLOW_RUN_ID" >> "$GITHUB_OUTPUT"
+          else
+            sha="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$INPUT_PR" --jq '.head.sha')"
+            run_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/evidence-publisher.yml/runs?head_sha=$sha&status=completed" --jq '.workflow_runs | map(select(.conclusion == "success")) | .[0].id')"
+            [[ "$run_id" =~ ^[0-9]+$ ]]
+            echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          fi
       - name: Download trusted evidence for completed review run
-        if: ${{ github.event_name == 'workflow_run' }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: bot-evidence
           path: evidence
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ steps.source_run.outputs.run_id }}
           github-token: ${{ github.token }}
       - name: Read reviewed head
         id: reviewed

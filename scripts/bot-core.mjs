@@ -7,6 +7,13 @@ const FORBIDDEN = [
   [/\b(?:next-auth|Auth\.js)\b/i, 'Auth.js requires an approved ADR'],
 ];
 
+/**
+ * Builds a deterministic bot work branch name for an issue.
+ * @param {number} number - Issue number.
+ * @param {string} title - Issue title.
+ * @param {string} [type='feature'] - Branch prefix category.
+ * @returns {string} Branch name in `<type>/<number>-<slug>` format.
+ */
 export function branchForIssue(number, title, type = 'feature') {
   if (!Number.isSafeInteger(Number(number)) || Number(number) < 1) throw new Error('A positive issue number is required');
   const prefix = ['feature', 'fix', 'security', 'chore'].includes(type) ? type : 'feature';
@@ -15,6 +22,12 @@ export function branchForIssue(number, title, type = 'feature') {
   return `${prefix}/${number}-${slug}`;
 }
 
+/**
+ * Checks changed file paths and contents against the Fynnestlady architecture policy.
+ * @param {string[]} [paths=[]] - Relative file paths.
+ * @param {string[]} [texts=[]] - File text contents matching `paths`.
+ * @returns {string[]} List of policy violations found.
+ */
 export function architectureViolations(paths = [], texts = []) {
   const violations = [];
   const exempt = new Set([
@@ -34,6 +47,11 @@ export function architectureViolations(paths = [], texts = []) {
   return [...new Set(violations)];
 }
 
+/**
+ * Determines which specialist review roles are required for the given changed file paths.
+ * @param {string[]} [paths=[]] - Relative file paths.
+ * @returns {string[]} Ordered list of required specialist agent role names.
+ */
 export function requiredReviews(paths = []) {
   const roles = new Set(['ArchitectAgent', 'ProductAgent', 'SecurityAgent', 'TestingAgent']);
   if (paths.some(p => /(?:^|\/)(?:supabase|migrations|schema|database)(?:\/|\b)|\.(?:sql|prisma)$/i.test(p))) roles.add('DatabaseAgent');
@@ -41,6 +59,12 @@ export function requiredReviews(paths = []) {
   return ROLE_NAMES.filter(r => roles.has(r));
 }
 
+/**
+ * Validates a bot evidence manifest against required specialist review roles.
+ * @param {object} manifest - Assembled evidence manifest.
+ * @param {string[]} [required=[]] - Required role names.
+ * @returns {{ok: boolean, reasons: string[]}} Validation result.
+ */
 export function validateEvidence(manifest, required = []) {
   const reasons = [];
   if (!manifest || typeof manifest !== 'object') return { ok: false, reasons: ['Evidence manifest missing'] };
@@ -55,6 +79,11 @@ export function validateEvidence(manifest, required = []) {
   return { ok: reasons.length === 0, reasons };
 }
 
+/**
+ * Evaluates whether a pull request targeting `dev` satisfies all merge gates.
+ * @param {object} [params={}] - Merge evaluation parameters.
+ * @returns {{ok: boolean, reasons: string[]}} Merge eligibility verdict.
+ */
 export function canMergeDev({ pr, checks = {}, evidence, requiredReviews: reviews = [], killSwitch = false } = {}) {
   const reasons = [];
   if (killSwitch) reasons.push('Kill switch enabled');
@@ -69,6 +98,12 @@ export function canMergeDev({ pr, checks = {}, evidence, requiredReviews: review
   return { ok: reasons.length === 0, reasons };
 }
 
+/**
+ * Determines whether a new automated repair attempt is permitted within the 3-attempt bound.
+ * @param {Array<{signature: string}>} [attempts=[]] - Previous repair attempt records.
+ * @param {string} signature - Current failure signature.
+ * @returns {{allowed: boolean, reason: string}} Retry verdict.
+ */
 export function nextRetry(attempts = [], signature) {
   if (!signature) return { allowed: false, reason: 'Failure signature missing' };
   if (attempts.length >= 3) return { allowed: false, reason: 'Three repair attempts exhausted' };

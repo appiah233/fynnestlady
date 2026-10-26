@@ -43,7 +43,7 @@ jobs:
             }
       - name: Write incident assessment artifact
         env:
-          GEMINI_INCIDENT_OUTPUT: ${{ steps.gemini_incident.outputs.gemini_response }}
+          GEMINI_INCIDENT_OUTPUT: ${{ steps.gemini_incident.outputs.summary }}
         run: |
           if [ -n "$GEMINI_INCIDENT_OUTPUT" ]; then
             printf '%s\n' "$GEMINI_INCIDENT_OUTPUT" > incident-assessment.txt

@@ -11,9 +11,7 @@ on:
         required: true
         default: true
         type: boolean
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 env:
   FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
   FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
@@ -25,6 +23,9 @@ jobs:
     if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' && (vars.FYNNESTLADY_PRODUCTION_ENABLED == 'true' || inputs.dry_run == true) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      checks: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -55,7 +56,7 @@ jobs:
             }
       - name: Write release review artifact
         env:
-          GEMINI_RELEASE_OUTPUT: ${{ steps.gemini_release.outputs.gemini_response }}
+          GEMINI_RELEASE_OUTPUT: ${{ steps.gemini_release.outputs.summary }}
         run: |
           if [ -n "$GEMINI_RELEASE_OUTPUT" ]; then
             printf '%s\n' "$GEMINI_RELEASE_OUTPUT" > release-review.txt
@@ -73,6 +74,10 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:

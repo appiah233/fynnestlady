@@ -13,12 +13,7 @@ on:
         description: Bot-owned PR branch
         required: true
         type: string
-permissions:
-  actions: read
-  contents: write
-  pull-requests: write
-  issues: write
-  models: read
+permissions: {}
 env:
   FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
   FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
@@ -30,6 +25,11 @@ jobs:
     if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_repository.full_name == github.repository)) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      pull-requests: read
     steps:
       - name: Require bot-owned work branch
         shell: bash
@@ -69,6 +69,9 @@ jobs:
     needs: claim
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    permissions:
+      contents: read
+      models: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -110,17 +113,17 @@ jobs:
       - name: Capture corrected patch
         shell: bash
         env:
-          GEMINI_REMEDIATE_OUTPUT: ${{ steps.gemini_remediate.outputs.gemini_response }}
+          GEMINI_REMEDIATE_OUTPUT: ${{ steps.gemini_remediate.outputs.summary }}
         run: |
           set -euo pipefail
           if [ -n "$GEMINI_REMEDIATE_OUTPUT" ]; then
             printf '%s\n' "$GEMINI_REMEDIATE_OUTPUT" > bot-remediation.txt
-          else
+          elif [ ! -s bot-remediation.txt ]; then
             echo "Gemini remediation completed" > bot-remediation.txt
           fi
           rm -rf candidate/.gemini
           git -C candidate add -N .
-          git -C candidate diff --binary > bot.patch
+          git -C candidate diff --binary --no-renames > bot.patch
           test -s bot.patch || { echo "::error::No repair patch produced"; exit 1; }
           git -C candidate diff --check
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -135,6 +138,8 @@ jobs:
     needs: diagnose
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -168,6 +173,11 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:

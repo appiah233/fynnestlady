@@ -8,10 +8,7 @@ on:
         description: Existing issue number
         required: true
         type: number
-permissions:
-  contents: write
-  issues: write
-  actions: write
+permissions: {}
 env:
   FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
   FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
@@ -23,6 +20,9 @@ jobs:
     if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || (github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'bot-ready')) || github.event.label.name == 'bot-ready') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -52,7 +52,7 @@ jobs:
             }
       - name: Write planning artifact
         env:
-          GEMINI_PLAN_OUTPUT: ${{ steps.gemini_plan.outputs.gemini_response }}
+          GEMINI_PLAN_OUTPUT: ${{ steps.gemini_plan.outputs.summary }}
           BOT_ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
         run: |
           if [ -n "$GEMINI_PLAN_OUTPUT" ]; then
@@ -71,6 +71,10 @@ jobs:
     needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: read
+      actions: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -81,7 +85,9 @@ jobs:
           name: bot-plan-${{ github.event.issue.number || inputs.issue_number }}
           path: bot-plan
       - name: Require planning output
-        run: test -s bot-plan/bot-plan.txt
+        run: |
+          test -s bot-plan/bot-plan.txt
+          grep -q 'decision: READY' bot-plan/bot-plan.txt
       - name: Mint GitHub App token (when configured)
         if: ${{ vars.FYNNESTLADY_USE_GITHUB_APP == 'true' }}
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349

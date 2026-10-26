@@ -4,7 +4,18 @@ import { resolve, dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { requiredReviews, validateEvidence } from './bot-core.mjs';
 
+/**
+ * Asserts that a required configuration value is present.
+ * @param {string | undefined} value - Value to check.
+ * @param {string} name - Environment variable name.
+ * @returns {string} Non-empty value.
+ */
 function required(value, name) { if (!value) throw new Error(`${name} is required`); return value; }
+
+/**
+ * Resolves the list of changed files for the candidate commit.
+ * @returns {string[]} Changed file paths.
+ */
 function changedFiles() {
   if (process.env.BOT_CHANGED_FILES) return JSON.parse(process.env.BOT_CHANGED_FILES);
   const target = required(process.env.BOT_TARGET_DIR, 'BOT_TARGET_DIR');
@@ -22,9 +33,16 @@ try {
   const reviews = {};
   for (const role of roles) {
     const value = JSON.parse(await readFile(join(reviewDir, `${role}.json`), 'utf8'));
-    if (!['pass', 'fail'].includes(value.status) || !Array.isArray(value.findings) || value.findings.some(x => typeof x !== 'string')) throw new Error(`Invalid ${role} review`);
+    if (
+      !['pass', 'fail'].includes(value.status) ||
+      value.headSha !== headSha ||
+      !Array.isArray(value.findings) ||
+      value.findings.some(x => typeof x !== 'string') ||
+      !Array.isArray(value.evidence) ||
+      value.evidence.some(x => typeof x !== 'string')
+    ) throw new Error(`Invalid ${role} review`);
     if (value.status !== 'pass') throw new Error(`${role} blocked: ${value.findings.join('; ')}`);
-    reviews[role] = { status: 'pass', headSha, findings: value.findings };
+    reviews[role] = { status: 'pass', headSha: value.headSha, findings: value.findings, evidence: value.evidence };
   }
   const manifest = {
     headSha,

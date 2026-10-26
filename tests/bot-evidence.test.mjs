@@ -36,7 +36,14 @@ function assemble(reviewDir, outputPath) {
 test('assembler requires every applicable independent verdict before publishing evidence', () => {
   const directory = mkdtempSync(join(tmpdir(), 'fynnestlady-review-fixture-'));
   try {
-    for (const role of ROLES) writeFileSync(join(directory, `${role}.json`), JSON.stringify({ status: 'pass', findings: [] }));
+    for (const role of ROLES) {
+      writeFileSync(join(directory, `${role}.json`), JSON.stringify({
+        status: 'pass',
+        headSha: HEAD,
+        findings: [],
+        evidence: ['src/app/page.tsx'],
+      }));
+    }
     const outputPath = join(directory, 'evidence.json');
     const passed = assemble(directory, outputPath);
     assert.equal(passed.status, 0, passed.stderr);
@@ -44,10 +51,25 @@ test('assembler requires every applicable independent verdict before publishing 
     assert.equal(manifest.headSha, HEAD);
     for (const role of ROLES) assert.equal(manifest.roles[role].headSha, HEAD);
 
-    writeFileSync(join(directory, 'TestingAgent.json'), JSON.stringify({ status: 'fail', findings: ['Regression remains'] }));
+    writeFileSync(join(directory, 'TestingAgent.json'), JSON.stringify({
+      status: 'fail',
+      headSha: HEAD,
+      findings: ['Regression remains'],
+      evidence: ['src/app/page.tsx'],
+    }));
     const rejected = assemble(directory, join(directory, 'rejected.json'));
     assert.notEqual(rejected.status, 0);
     assert.match(rejected.stderr, /TestingAgent blocked/);
+
+    writeFileSync(join(directory, 'TestingAgent.json'), JSON.stringify({
+      status: 'pass',
+      headSha: 'd'.repeat(40),
+      findings: [],
+      evidence: ['src/app/page.tsx'],
+    }));
+    const stale = assemble(directory, join(directory, 'stale.json'));
+    assert.notEqual(stale.status, 0);
+    assert.match(stale.stderr, /Invalid TestingAgent review/);
 
     rmSync(join(directory, 'DesignAgent.json'));
     const missing = assemble(directory, join(directory, 'missing.json'));

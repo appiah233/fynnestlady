@@ -69,14 +69,15 @@ jobs:
           BOT_REVIEW_ROLE: ${{ matrix.role }}
           BOT_REVIEW_FILE: ${{ github.workspace }}/reviews/${{ matrix.role }}.json
           BOT_TARGET_DIR: ${{ github.workspace }}/candidate
-          GEMINI_REVIEW_OUTPUT: ${{ steps.gemini_review.outputs.gemini_response }}
+          BOT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GEMINI_REVIEW_OUTPUT: ${{ steps.gemini_review.outputs.summary }}
         run: |
           if [ -f scripts/bot.mjs ]; then
             node scripts/bot.mjs role-review
           else
             node candidate/scripts/bot.mjs role-review
           fi
-          node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync(process.env.BOT_REVIEW_FILE,'utf8'));if(!['pass','fail'].includes(x.status)||!Array.isArray(x.findings))process.exit(1)"
+          node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync(process.env.BOT_REVIEW_FILE,'utf8'));if(!['pass','fail'].includes(x.status)||x.headSha!==process.env.BOT_HEAD_SHA||!Array.isArray(x.findings)||!Array.isArray(x.evidence))process.exit(1)"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: role-${{ matrix.role }}
@@ -117,7 +118,8 @@ jobs:
           node --input-type=module <<'NODE'
           import { appendFileSync } from 'node:fs';
           const match = /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?|issue)\s+#(\d+)/i.exec(process.env.BOT_PR_BODY || '');
-          const issueNum = match ? match[1] : '7';
+          if (!match) throw new Error('PR body must reference an open issue');
+          const issueNum = match[1];
           const names = ['quality-gate', 'security-gate', 'database-gate', 'accessibility-gate', 'architecture-policy', 'governance', 'scan'];
           const url = `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/commits/${process.env.BOT_HEAD_SHA}/check-runs?per_page=100`;
           let runs = [];

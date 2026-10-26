@@ -6,10 +6,7 @@ on:
     branches: [dev]
     types: [opened, synchronize, reopened]
   workflow_dispatch:
-permissions:
-  contents: read
-  pull-requests: read
-  issues: write
+permissions: {}
 env:
   FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
   FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
@@ -21,21 +18,33 @@ jobs:
     if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || 'dev' }}
+          ref: dev
           persist-credentials: false
       - name: Audit dependencies and avoid duplicate work
         env:
           BOT_PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/bot.mjs dependency
+        run: |
+          if [ -f scripts/bot.mjs ]; then
+            node scripts/bot.mjs dependency
+          else
+            echo "dependabot_prs=0"
+          fi
   create-issues:
     if: ${{ github.event_name != 'pull_request' && vars.FYNNESTLADY_BOT_ENABLED == 'true' }}
     needs: inspect
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:

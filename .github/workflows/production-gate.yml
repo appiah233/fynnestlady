@@ -25,12 +25,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Check out trusted controller
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: main
+          persist-credentials: false
+      - name: Check out candidate release branch as data
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || 'dev' }}
+          path: candidate
+          fetch-depth: 0
           persist-credentials: false
       - name: Validate release evidence, migrations, preview and rollback
         env:
           BOT_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          BOT_TARGET_DIR: ${{ github.workspace }}/candidate
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/bot.mjs production-gate
       - name: Failure summary

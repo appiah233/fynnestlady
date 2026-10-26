@@ -10,11 +10,7 @@ on:
         description: Existing bot-owned branch
         required: true
         type: string
-permissions:
-  contents: write
-  issues: write
-  actions: write
-  models: read
+permissions: {}
 env:
   FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
   FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
@@ -26,6 +22,10 @@ jobs:
     if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: read
+      models: read
     steps:
       - name: Reject unexpected branch reference
         shell: bash
@@ -81,18 +81,18 @@ jobs:
       - name: Capture patch
         shell: bash
         env:
-          GEMINI_IMPL_OUTPUT: ${{ steps.gemini_impl.outputs.gemini_response }}
+          GEMINI_IMPL_OUTPUT: ${{ steps.gemini_impl.outputs.summary }}
         run: |
           set -euo pipefail
           if [ -n "$GEMINI_IMPL_OUTPUT" ]; then
             printf '%s\n' "$GEMINI_IMPL_OUTPUT" > bot-implementation.txt
-          else
+          elif [ ! -s bot-implementation.txt ]; then
             echo "Gemini implementation completed" > bot-implementation.txt
           fi
           rm -f candidate/.bot-task.md
           rm -rf candidate/.gemini
           git -C candidate add -N .
-          git -C candidate diff --binary > bot.patch
+          git -C candidate diff --binary --no-renames > bot.patch
           test -s bot.patch || { echo "::error::Gemini produced no changes"; exit 1; }
           git -C candidate diff --check
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -107,6 +107,8 @@ jobs:
     needs: implement
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    permissions:
+      contents: read
     steps:
       - name: Check out trusted controller
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -118,6 +120,7 @@ jobs:
         with:
           ref: ${{ inputs.branch_name }}
           path: candidate
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
@@ -141,6 +144,10 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
+      issues: write
+      actions: write
     steps:
       - name: Reject unexpected branch reference
         shell: bash
