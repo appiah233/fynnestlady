@@ -36,7 +36,12 @@ jobs:
         env:
           BOT_TARGET_DIR: ${{ github.workspace }}/candidate
           BOT_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
-        run: node scripts/bot.mjs policy
+        run: |
+          if [ -f scripts/bot.mjs ]; then
+            node scripts/bot.mjs policy
+          else
+            node candidate/scripts/bot.mjs policy
+          fi
   quality-gate:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
@@ -58,7 +63,12 @@ jobs:
         env:
           BOT_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
           BOT_TARGET_DIR: ${{ github.workspace }}/candidate
-        run: node scripts/bot.mjs quality
+        run: |
+          if [ -f scripts/bot.mjs ]; then
+            node scripts/bot.mjs quality
+          else
+            node candidate/scripts/bot.mjs quality
+          fi
       - name: Failure summary
         if: failure()
         run: echo "::error::PR quality gate failed; inspect this run and the PR evidence." >> "$GITHUB_STEP_SUMMARY"

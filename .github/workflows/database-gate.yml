@@ -37,7 +37,12 @@ jobs:
         env:
           BOT_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
           BOT_TARGET_DIR: ${{ github.workspace }}/candidate
-        run: node scripts/bot.mjs database
+        run: |
+          if [ -f scripts/bot.mjs ]; then
+            node scripts/bot.mjs database
+          else
+            node candidate/scripts/bot.mjs database
+          fi
       - name: Failure summary
         if: failure()
         run: echo "::error::Database gate failed; inspect this run and the PR evidence." >> "$GITHUB_STEP_SUMMARY"

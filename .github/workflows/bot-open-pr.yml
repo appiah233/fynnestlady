@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   open:
-    if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip bot]')) }}
+    if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || (!contains(github.event.head_commit.message, '[skip bot]') && startsWith(github.ref_name, 'feature/') && github.ref_name != 'feature/fynnestlady-engineering-bot')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
