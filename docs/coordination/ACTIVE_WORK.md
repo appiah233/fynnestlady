@@ -1,5 +1,19 @@
 # Active Work
 
+## 2026-10-26T13:00:00Z DesignAgent
+
+Task ID: SPRINT1-DESIGN-001
+Branch: feature/8-design-system (from dev)
+Role: Design system and UX owner
+Objective: Establish an executable mobile-first visual system from the supplied Fynnestlady logo.
+Business outcome: Consistent, accessible customer interfaces that support clear discovery and purchase decisions, following the building memo.
+Scope: Brand asset, semantic CSS tokens, base styles, reusable controls, and design specifications.
+Non-goals: Catalogue content, backend contracts, routing, and checkout logic.
+Files expected: src/app/globals.css, src/components/ui/**, public/brand/**, docs/design/**.
+Dependencies: ArchitectAgent imports globals.css and installs the application/toolchain; StorefrontAgent consumes the components; TestingAgent independently verifies them.
+Conflicts checked: ArchitectAgent owns package/layout/page and explicitly handed globals.css to DesignAgent. Other streams own schema and security. Source logo was untracked in the original worktree.
+Status: In progress.
+
 ## 2026-10-21T16:22:55Z Codex
 
 Task ID: M0-FOUNDATION-001  
