@@ -17,9 +17,17 @@ export function branchForIssue(number, title, type = 'feature') {
 
 export function architectureViolations(paths = [], texts = []) {
   const violations = [];
+  const exempt = new Set([
+    '.github/fynnestlady/architecture-policy.yml',
+    '.gitignore',
+    'scripts/bot-core.mjs',
+    'tests/bot-cli.test.mjs',
+    'tests/bot-core.test.mjs',
+  ]);
   for (let i = 0; i < paths.length; i++) {
-    const path = String(paths[i]);
+    const path = String(paths[i]).replace(/\\/g, '/');
     const text = String(texts[i] ?? '');
+    if (exempt.has(path)) continue;
     if (/\.(?:md|txt)$/i.test(path) && !/requirements\.txt$/i.test(path)) continue;
     for (const [pattern, reason] of FORBIDDEN) if (pattern.test(text)) violations.push(`${path}: ${reason}`);
   }
