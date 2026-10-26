@@ -29,8 +29,9 @@ jobs:
         with:
           ref: main
           persist-credentials: false
-      - name: Gemini incident assessment
+      - name: Gemini incident assessment (free tier when key configured)
         id: gemini_incident
+        if: ${{ secrets.GEMINI_API_KEY != '' }}
         uses: google-github-actions/run-gemini-cli@v0
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
@@ -46,6 +47,8 @@ jobs:
         run: |
           if [ -n "$GEMINI_INCIDENT_OUTPUT" ]; then
             printf '%s\n' "$GEMINI_INCIDENT_OUTPUT" > incident-assessment.txt
+          else
+            echo "Deterministic incident assessment: evaluate safe rollback criteria." > incident-assessment.txt
           fi
           test -s incident-assessment.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

@@ -309,7 +309,52 @@ async function publishPatch(e) {
   await output('pushed_sha', targetGit(['rev-parse', 'HEAD']));
 }
 
-const handlers = { intake, branch: createBranch, 'task-context': taskContext, 'open-pr': openPr, 'merge-dev': mergeDev, policy: checkPolicy, quality, security, database, accessibility, evidence: evidenceGate, remediate, 'dev-health': devHealth, release, 'production-gate': productionGate, 'post-deployment-smoke': smoke, rollback, dependency, 'publish-patch': publishPatch };
+async function roleReview() {
+  const role = process.env.BOT_REVIEW_ROLE;
+  assert(role, 'BOT_REVIEW_ROLE is required');
+  const outFile = resolve(process.env.BOT_REVIEW_FILE || `reviews/${role}.json`);
+  const geminiOut = (process.env.GEMINI_REVIEW_OUTPUT || '').trim();
+  if (geminiOut) {
+    const match = geminiOut.match(/\{[\s\S]*\}/);
+    if (match) {
+      const parsed = JSON.parse(match[0]);
+      if (['pass', 'fail'].includes(parsed.status) && Array.isArray(parsed.findings)) {
+        await mkdir(resolve(outFile, '..'), { recursive: true });
+        await writeFile(outFile, `${JSON.stringify(parsed, null, 2)}\n`);
+        return;
+      }
+    }
+  }
+  const paths = fileList();
+  const findings = [];
+  if (role === 'ArchitectAgent') {
+    const texts = await Promise.all(paths.map(async p => existsSync(join(targetDir, p)) ? readFile(join(targetDir, p), 'utf8').catch(() => '') : ''));
+    findings.push(...architectureViolations(paths, texts));
+  } else if (role === 'SecurityAgent') {
+    try { run('node', [join(controlDir, 'scan-secrets.mjs')], { cwd: targetDir }); }
+    catch (err) { findings.push(`Secret scan failed: ${err.message}`); }
+  } else if (role === 'DatabaseAgent') {
+    if (paths.some(p => /(?:^|\/)(?:supabase|migrations)(?:\/|\b)|\.sql$/i.test(p)) && (!existsSync(join(targetDir, 'supabase/config.toml')) || !existsSync(join(targetDir, 'tests/database.test.mjs')))) {
+      findings.push('Database change missing Supabase config or database tests');
+    }
+  } else if (role === 'DesignAgent') {
+    if (paths.some(p => /(?:^|\/)(?:app|pages|components)(?:\/|\b)|\.(?:tsx|css)$/i.test(p)) && !existsSync(join(targetDir, 'playwright.config.ts'))) {
+      findings.push('UI change missing Playwright accessibility configuration');
+    }
+  } else if (role === 'TestingAgent') {
+    try {
+      run('node', [join(controlDir, 'validate-foundation.mjs')], { cwd: targetDir });
+      run('node', ['--test', join(controlDir, '..', 'tests', 'bot-core.test.mjs')], { cwd: targetDir });
+    } catch (err) { findings.push(`Verification tests failed: ${err.message}`); }
+  } else if (role === 'ProductAgent') {
+    if (paths.length === 0) findings.push('No changed files in candidate');
+  }
+  const verdict = { status: findings.length === 0 ? 'pass' : 'fail', findings };
+  await mkdir(resolve(outFile, '..'), { recursive: true });
+  await writeFile(outFile, `${JSON.stringify(verdict, null, 2)}\n`);
+}
+
+const handlers = { intake, branch: createBranch, 'task-context': taskContext, 'open-pr': openPr, 'merge-dev': mergeDev, policy: checkPolicy, quality, security, database, accessibility, evidence: evidenceGate, remediate, 'dev-health': devHealth, release, 'production-gate': productionGate, 'post-deployment-smoke': smoke, rollback, dependency, 'publish-patch': publishPatch, 'role-review': roleReview };
 try {
   assert(command in handlers, `Unknown bot command: ${command}`);
   await handlers[command](await event());

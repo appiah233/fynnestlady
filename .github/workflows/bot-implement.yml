@@ -146,7 +146,9 @@ jobs:
         with:
           ref: dev
           persist-credentials: false
-      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+      - name: Mint GitHub App token (when configured)
+        if: ${{ secrets.FYNNESTLADY_APP_ID != '' && secrets.FYNNESTLADY_APP_PRIVATE_KEY != '' }}
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
         id: app
         with:
           app-id: ${{ secrets.FYNNESTLADY_APP_ID }}
@@ -159,7 +161,7 @@ jobs:
         with:
           ref: ${{ inputs.branch_name }}
           path: candidate
-          token: ${{ steps.app.outputs.token }}
+          token: ${{ steps.app.outputs.token || github.token }}
           persist-credentials: true
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093a
         with:
@@ -167,13 +169,13 @@ jobs:
           path: bot-artifact
       - name: Commit and push to issue branch
         env:
-          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app.outputs.token || github.token }}
           BOT_ISSUE_NUMBER: ${{ inputs.issue_number }}
           BOT_TARGET_DIR: ${{ github.workspace }}/candidate
           BOT_PATCH_PATH: ${{ github.workspace }}/bot-artifact/bot.patch
         run: node scripts/bot.mjs publish-patch
       - name: Dispatch PR creation
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
           BOT_ISSUE_NUMBER: ${{ inputs.issue_number }}
         run: gh workflow run bot-open-pr.yml --ref dev -f issue_number="$BOT_ISSUE_NUMBER"
