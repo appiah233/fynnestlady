@@ -70,7 +70,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/bot.mjs evidence
       - name: Mint GitHub App token (when configured)
-        if: ${{ secrets.FYNNESTLADY_APP_ID != '' && secrets.FYNNESTLADY_APP_PRIVATE_KEY != '' }}
+        if: ${{ vars.FYNNESTLADY_USE_GITHUB_APP == 'true' }}
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
         id: app
         with:

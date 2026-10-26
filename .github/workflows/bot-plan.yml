@@ -40,7 +40,7 @@ jobs:
         run: node scripts/bot.mjs task-context
       - name: Gemini issue planning (free tier when key configured)
         id: gemini_plan
-        if: ${{ secrets.GEMINI_API_KEY != '' }}
+        if: ${{ vars.FYNNESTLADY_USE_GEMINI_API == 'true' }}
         uses: google-github-actions/run-gemini-cli@v0
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
@@ -83,7 +83,7 @@ jobs:
       - name: Require planning output
         run: test -s bot-plan/bot-plan.txt
       - name: Mint GitHub App token (when configured)
-        if: ${{ secrets.FYNNESTLADY_APP_ID != '' && secrets.FYNNESTLADY_APP_PRIVATE_KEY != '' }}
+        if: ${{ vars.FYNNESTLADY_USE_GITHUB_APP == 'true' }}
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
         id: app
         with:

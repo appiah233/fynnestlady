@@ -31,7 +31,7 @@ jobs:
           persist-credentials: false
       - name: Gemini incident assessment (free tier when key configured)
         id: gemini_incident
-        if: ${{ secrets.GEMINI_API_KEY != '' }}
+        if: ${{ vars.FYNNESTLADY_USE_GEMINI_API == 'true' }}
         uses: google-github-actions/run-gemini-cli@v0
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
