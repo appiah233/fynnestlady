@@ -1,0 +1,14 @@
+{
+  "sprint": 1,
+  "buildingMemo": "docs/governance/BUILDING_MEMO.md",
+  "integrationBranch": "dev",
+  "status": "active",
+  "work": [
+    { "id": "S1-DESIGN", "issue": 8, "agent": "DesignAgent", "branch": "feature/8-design-system", "scope": ["src/app/globals.css", "src/components/ui/**", "docs/design/**", "public/brand/**"], "status": "in-review", "dependencies": [], "tests": ["contrast", "responsive", "keyboard", "integrated build"], "blockers": [], "handoff": "ArchitectAgent imports stylesheet; TestingAgent verifies" },
+    { "id": "S1-DATA", "issue": 9, "agent": "DatabaseAgent", "branch": "feature/9-supabase-foundation", "scope": ["supabase/**", "docs/architecture/data-contracts/**"], "status": "active", "dependencies": [], "tests": ["migration replay", "constraints", "negative RLS"], "blockers": [], "handoff": "SecurityAgent and TestingAgent verify RLS" },
+    { "id": "S1-ARCH", "issue": 10, "agent": "ArchitectAgent", "branch": "feature/10-app-foundation", "scope": ["package.json", "package-lock.json", "src/app/layout.tsx", "src/app/page.tsx", "src/lib/**", ".env.example"], "status": "active", "dependencies": [], "tests": ["build", "typecheck", "architecture gate"], "blockers": [], "handoff": "Integrate DesignAgent CSS and DatabaseAgent contracts" },
+    { "id": "S1-SEC", "issue": 11, "agent": "SecurityAgent", "branch": "security/11-baseline", "scope": ["docs/architecture/SECURITY_BASELINE.md"], "status": "in-review", "dependencies": ["S1-DATA"], "tests": ["negative authorization", "secret isolation"], "blockers": [], "handoff": "TestingAgent verifies after integration" },
+    { "id": "S1-TEST", "issue": 12, "agent": "TestingAgent", "branch": "feature/12-testing-foundation", "scope": ["tests/**", "e2e/**", "docs/testing/**"], "status": "queued", "dependencies": ["S1-DESIGN", "S1-DATA", "S1-ARCH", "S1-SEC"], "tests": ["independent acceptance"], "blockers": [], "handoff": "Engineering Bot receives gate verdict" }
+  ],
+  "next": ["storefront", "catalogue", "authentication"]
+}

@@ -1,6 +1,8 @@
 # ADR-011: GitHub Governance
 
-Status: **Proposed**
+Status: **Superseded by ADR-014 on 2026-10-26**
+
+This record preserves the initial owner-only merge proposal. The later owner instruction authorizes Fynnestlady Engineering Bot to merge eligible `dev` PRs and routine releases through protected gates. See ADR-014; do not use this record as the active merge policy.
 
 ## Context
 The public repository needs controlled changes and owner-only merge authority.

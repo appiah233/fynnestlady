@@ -1,0 +1,48 @@
+name: Production gate
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Release PR number
+        required: true
+        type: number
+permissions:
+  contents: read
+  pull-requests: read
+  deployments: read
+env:
+  FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
+  FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
+concurrency:
+  group: production-gate-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: true
+jobs:
+  production-gate:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out trusted controller
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Check out candidate release branch as data
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || 'dev' }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate release evidence, migrations, preview and rollback
+        env:
+          BOT_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          BOT_TARGET_DIR: ${{ github.workspace }}/candidate
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/bot.mjs production-gate
+      - name: Failure summary
+        if: failure()
+        run: echo "::error::Release blocked by production gate. Inspect failed evidence." >> "$GITHUB_STEP_SUMMARY"
