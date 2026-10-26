@@ -7,7 +7,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test",
+    "test:e2e": "playwright test",
     "test:app": "node --experimental-strip-types --test tests/app-foundation.test.mjs"
   },
   "dependencies": {
@@ -23,7 +26,14 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@eslint/eslintrc": "^3.3.0",
+    "@playwright/test": "1.64.1",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "15.5.28",
     "tailwindcss": "^4.1.0",
     "typescript": "^5.9.0"
+  },
+  "overrides": {
+    "postcss": "8.5.31"
   }
 }

@@ -1,8 +1,30 @@
+# Dependencies and builds
 node_modules/
 .next/
 out/
-*.tsbuildinfo
+coverage/
+playwright-report/
+test-results/
+
+# Local environment and secrets
 .env
-.env.local
-.env.*.local
+.env.*
 !.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Logs and local tooling
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.gemini/
+gha-creds-*.json
+
+# Prisma/local data
+*.db
+*.db-journal
+*.tsbuildinfo
