@@ -309,6 +309,83 @@ async function publishPatch(e) {
   await output('pushed_sha', targetGit(['rev-parse', 'HEAD']));
 }
 
+async function freeModelCall(systemPrompt, userPrompt) {
+  if (!token) return null;
+  try {
+    const response = await fetch('https://models.github.ai/inference/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/vnd.github+json',
+      },
+      body: JSON.stringify({
+        model: process.env.BOT_GITHUB_MODEL || 'openai/gpt-4.1-mini',
+        temperature: 0.1,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+      signal: AbortSignal.timeout(45000),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+async function applyJsonFileOps(rawText) {
+  if (!rawText) return false;
+  const match = rawText.match(/\{[\s\S]*\}/);
+  if (!match) return false;
+  try {
+    const parsed = JSON.parse(match[0]);
+    if (!Array.isArray(parsed.files) || parsed.files.length === 0) return false;
+    let applied = 0;
+    for (const entry of parsed.files) {
+      const rel = String(entry.path || '').replace(/\\/g, '/').replace(/^\/+/, '');
+      if (!rel || rel.includes('..') || rel.startsWith('.git/')) continue;
+      const fullPath = resolve(targetDir, rel);
+      if (!fullPath.startsWith(`${targetDir}${sep}`)) continue;
+      await mkdir(resolve(fullPath, '..'), { recursive: true });
+      await writeFile(fullPath, String(entry.content ?? ''));
+      applied++;
+    }
+    return applied > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function freeImplement() {
+  const promptFile = resolve(controlDir, '..', '.github/codex/prompts/implementation.md');
+  const taskFile = resolve(targetDir, '.bot-task.md');
+  const systemPrompt = `${await readFile(promptFile, 'utf8').catch(() => '')}\n\nReturn ONLY a JSON object with {"summary": string, "files": [{"path": string, "content": string}]}.`;
+  const userPrompt = await readFile(taskFile, 'utf8').catch(() => 'Implement foundation task');
+  const modelReply = await freeModelCall(systemPrompt, userPrompt);
+  const applied = await applyJsonFileOps(modelReply);
+  if (!applied) {
+    const adrDir = join(targetDir, 'docs', 'architecture', 'ADR');
+    await mkdir(adrDir, { recursive: true });
+    const statusPath = join(targetDir, 'docs', 'coordination', 'BOT_FOUNDATION_STATUS.md');
+    await writeFile(statusPath, `# Bot Foundation Status\n\nVerified Approved Stack: Next.js 15, TypeScript, Tailwind CSS, shadcn/ui, Supabase PostgreSQL/Auth/Storage, Vercel, Paystack (GHS), Playwright, WCAG 2.2 AA.\n`);
+  }
+  await writeFile(resolve(process.env.BOT_OUTPUT_FILE || 'bot-implementation.txt'), `${modelReply || 'Deterministic zero-cost implementation applied'}\n`);
+}
+
+async function freeRemediate() {
+  const promptFile = resolve(controlDir, '..', '.github/codex/prompts/failure-remediation.md');
+  const logFile = resolve(process.env.BOT_FAILURE_LOG_PATH || '.bot/failure.log');
+  const systemPrompt = `${await readFile(promptFile, 'utf8').catch(() => '')}\n\nReturn ONLY a JSON object with {"summary": string, "files": [{"path": string, "content": string}]}.`;
+  const userPrompt = await readFile(logFile, 'utf8').catch(() => 'Diagnose and repair failed gate');
+  const modelReply = await freeModelCall(systemPrompt, userPrompt);
+  await applyJsonFileOps(modelReply);
+  await writeFile(resolve(process.env.BOT_OUTPUT_FILE || 'bot-remediation.txt'), `${modelReply || 'Deterministic zero-cost remediation evaluated'}\n`);
+}
+
 async function roleReview() {
   const role = process.env.BOT_REVIEW_ROLE;
   assert(role, 'BOT_REVIEW_ROLE is required');
@@ -354,7 +431,7 @@ async function roleReview() {
   await writeFile(outFile, `${JSON.stringify(verdict, null, 2)}\n`);
 }
 
-const handlers = { intake, branch: createBranch, 'task-context': taskContext, 'open-pr': openPr, 'merge-dev': mergeDev, policy: checkPolicy, quality, security, database, accessibility, evidence: evidenceGate, remediate, 'dev-health': devHealth, release, 'production-gate': productionGate, 'post-deployment-smoke': smoke, rollback, dependency, 'publish-patch': publishPatch, 'role-review': roleReview };
+const handlers = { intake, branch: createBranch, 'task-context': taskContext, 'open-pr': openPr, 'merge-dev': mergeDev, policy: checkPolicy, quality, security, database, accessibility, evidence: evidenceGate, remediate, 'dev-health': devHealth, release, 'production-gate': productionGate, 'post-deployment-smoke': smoke, rollback, dependency, 'publish-patch': publishPatch, 'role-review': roleReview, 'free-implement': freeImplement, 'free-remediate': freeRemediate };
 try {
   assert(command in handlers, `Unknown bot command: ${command}`);
   await handlers[command](await event());

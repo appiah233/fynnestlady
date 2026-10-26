@@ -11,8 +11,10 @@ on:
         required: true
         type: string
 permissions:
-  contents: read
-  issues: read
+  contents: write
+  issues: write
+  actions: write
+  models: read
 env:
   FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
   FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
@@ -57,8 +59,9 @@ jobs:
           BOT_CONTEXT_PATH: ${{ github.workspace }}/candidate/.bot-task.md
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/bot.mjs task-context
-      - name: Gemini implementation
+      - name: Gemini implementation (free tier when key configured)
         id: gemini_impl
+        if: ${{ vars.FYNNESTLADY_USE_GEMINI_API == 'true' }}
         uses: google-github-actions/run-gemini-cli@v0
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
@@ -68,6 +71,13 @@ jobs:
             {
               "telemetry": { "enabled": false }
             }
+      - name: Built-in GitHub Models / deterministic zero-cost implementation
+        if: ${{ vars.FYNNESTLADY_USE_GEMINI_API != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BOT_TARGET_DIR: ${{ github.workspace }}/candidate
+          BOT_OUTPUT_FILE: ${{ github.workspace }}/bot-implementation.txt
+        run: node scripts/bot.mjs free-implement
       - name: Capture patch
         shell: bash
         env:
