@@ -32,7 +32,7 @@ One agent may document multiple perspectives during foundation work, but must re
 
 ## Branches and Commits
 
-Never develop directly on `main`. Use branches such as `docs/*`, `feat/*`, `fix/*`, or `security/*`. Use conventional commit prefixes: `feat`, `fix`, `security`, `refactor`, `test`, `docs`, `chore`, `perf`, and `ci`.
+`main` and `dev` are permanent. `main` is production; `dev` is deployable integration. Never implement directly on either. Use short-lived branches such as `docs/*`, `feat/*`, `fix/*`, or `security/*`, normally opening PRs to `dev`. Release PRs promote an exact verified `dev` SHA to `main`. Force pushes, branch deletion, autonomous promotion, and agent/bot merges are prohibited. Use conventional commit prefixes: `feat`, `fix`, `security`, `refactor`, `test`, `docs`, `chore`, `perf`, and `ci`.
 
 ## Decision Governance
 
@@ -48,7 +48,7 @@ Material architecture choices require an ADR with context, options, decision sta
 
 ## Pull Requests and Deployment
 
-Pull requests require complete scope, impact, evidence, risk, rollback, and coordination information. The PR bot may report `PASS FOR OWNER REVIEW`, `CHANGES REQUIRED`, `BLOCKED`, or `INSUFFICIENT EVIDENCE`; never merge approval. Production deployment requires a merged, reviewed commit, passing release gates, a rollback plan, and explicit owner authorization.
+Pull requests to `dev` and `main` require complete scope, impact, evidence, risk, rollback, and coordination information plus fail-closed CI. Release PRs identify the exact `dev` SHA, included changes, migrations, security impact, known risks, rollback, evidence, and owner decisions. The PR bot may report `PASS FOR OWNER REVIEW`, `CHANGES REQUIRED`, `BLOCKED`, or `INSUFFICIENT EVIDENCE`; never merge approval. Production deployment requires an approved `main` revision, passing release gates, an immutable artifact, a protected production environment, rollback plan, and explicit owner authorization.
 
 ## Incidents and Rollback
 
