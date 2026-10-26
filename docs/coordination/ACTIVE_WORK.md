@@ -35,4 +35,3 @@ Files expected: docs/architecture/SECURITY_BASELINE.md.
 Dependencies: DatabaseAgent RLS contract; TestingAgent verification.
 Conflicts checked: Isolated worktree from dev; no shared file edits.
 Status: In review; PR #13.
-

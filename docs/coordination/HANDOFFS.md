@@ -45,4 +45,3 @@ Blockers: Dependency review CI unsupported on current repository; independent re
 Decisions required: Repository dependency-review capability or approved equivalent gate.
 Next owner: SecurityAgent and TestingAgent.
 Next action: Independently verify database policies and integrated app secret isolation.
-
