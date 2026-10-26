@@ -32,3 +32,23 @@ An attacker submits a lower price, reuses a valid webhook, races the final stock
 ## Residual Risks and Required Decisions
 
 Production database/provider, admin MFA, rate-limit backing store, malware scanning depth, CloudFront, WAF/Turnstile, retention, and recovery objectives remain owner decisions after cost and operational review.
+
+## Engineering Bot Control Plane (2026-10-26)
+
+The new control plane crosses four boundaries: untrusted issue/PR/repository text into Gemini; untrusted branch code into GitHub-hosted CI; CI evidence into a privileged merge controller; and a short-lived GitHub App installation token into repository mutation. The App is installed only on `appiah233/fynnestlady`. GitHub Actions is the event engine; its triggers must be verified against the installed App's events and Actions token behavior. The App has no webhook listener. The first validation has no production secrets, `main` merge, or production deployment.
+
+| Threat | Abuse case | Required control | Evidence to verify |
+|---|---|---|---|
+| Issue or repository prompt injection | Text tells Gemini to ignore rules, disclose secrets, or approve itself | Treat issue body, code, README, logs, and artifacts as data; fixed trusted prompts; no production secrets in Gemini; validate all resulting changes | Adversarial text fixture leaves policy unchanged |
+| Untrusted PR or fork code | Attacker changes test code or workflow and gains write token | Run untrusted checkout with read-only token and no secrets; never run fork code in privileged `pull_request_target`; split analysis and mutation jobs | Fork fixture cannot read App/Gemini secrets or write repository |
+| Workflow command or shell injection | Issue title, ref, path, or output becomes shell syntax | Pass values through typed inputs/environment and quoted arguments; validate branch names and issue IDs; never interpolate event text into scripts | Metacharacter fixture remains literal |
+| Token exfiltration | Logs, malicious dependency, or Gemini output reveal installation/Gemini token | Mint repository-scoped short-lived installation tokens only in privileged jobs; mask/redact logs; disable token persistence on untrusted checkout; rotate on compromise | Log scan and credential-scope audit |
+| Workflow-file compromise | Bot edits CI to skip checks or send credentials away | `workflows: write` only because first task repairs CI; require independent review and workflow-diff checks; branch protection forbids bypass | Malicious workflow change blocks merge |
+| Poisoned artifacts/caches | Untrusted build output is presented as release evidence or executable input | Validate source SHA, run ID, provenance, schema, and checksums; do not execute downloaded artifacts in privileged jobs; isolate caches by trust level | Mismatched artifact rejected |
+| Malicious dependency | Install script steals CI credential or alters build | Lockfile, dependency review, least-privilege job tokens, no privileged install of PR dependencies | Vulnerable dependency fixture blocks |
+| Forged checks or stale evidence | Bot creates a green signal for different SHA | App has checks/statuses read only; merge controller requires exact head SHA, named source App, completed successful conclusions, and fresh evidence | Missing/stale/wrong-source check blocks |
+| Branch-protection bypass | Merge despite missing reviewer or gate | No Administration permission and no bypass grant; use normal PR merge API only; verify live rule result | Missing code-owner approval blocks |
+| Infinite loop/cost abuse | Bot reacts to its own events indefinitely | Event source/label tracking, dedupe, bounded retries, concurrency, timeouts, daily budgets, kill switch | Self-event and retry-limit fixtures terminate |
+| Unsafe deployment or rollback | Bot promotes a bad revision or corrupts data | First validation stops at dev; release requires exact SHA, production gates, protected environment, smoke checks; exception list requires owner decision | Dry-run release and negative gate fixtures |
+
+Current residual blocker: `@appiah233` is the only required code owner. An App cannot provide independent human code-owner approval for its own changes. Automatic merge must remain blocked until the owner intentionally changes the review arrangement without weakening required checks. The manifest and policy are repository proposals; installation, token scope, live rules, and negative fixtures require separate verification.

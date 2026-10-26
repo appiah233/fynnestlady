@@ -1,0 +1,86 @@
+name: Bot merge dev
+on:
+  workflow_run:
+    workflows: [Evidence gate]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR targeting dev
+        required: true
+        type: number
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+env:
+  FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
+  FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
+concurrency:
+  group: bot-merge-dev-${{ github.event.workflow_run.head_sha || inputs.pr_number }}
+  cancel-in-progress: false
+jobs:
+  merge:
+    if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          persist-credentials: false
+      - name: Download trusted evidence for completed review run
+        if: ${{ github.event_name == 'workflow_run' }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093a
+        with:
+          name: bot-evidence
+          path: evidence
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: Read reviewed head
+        id: reviewed
+        env:
+          BOT_EVIDENCE_PATH: ${{ github.workspace }}/evidence/bot-evidence.json
+        run: node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync(process.env.BOT_EVIDENCE_PATH));if(!/^[0-9a-f]{40}$/i.test(x.headSha))process.exit(1);fs.appendFileSync(process.env.GITHUB_OUTPUT,'sha='+x.headSha+'\n')"
+      - name: Resolve PR from reviewed commit
+        id: pull
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BOT_REVIEWED_SHA: ${{ steps.reviewed.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          number="$(gh api "repos/$GITHUB_REPOSITORY/commits/$BOT_REVIEWED_SHA/pulls" --jq 'map(select(.base.ref == "dev")) | .[0].number')"
+          [[ "$number" =~ ^[0-9]+$ ]]
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+      - name: Check out reviewed PR head as data
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ steps.reviewed.outputs.sha }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify all gates, evidence and current head
+        env:
+          BOT_PR_NUMBER: ${{ steps.pull.outputs.number }}
+          BOT_SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+          BOT_EVIDENCE_PATH: ${{ github.workspace }}/evidence/bot-evidence.json
+          BOT_TARGET_DIR: ${{ github.workspace }}/candidate
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/bot.mjs evidence
+      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        id: app
+        with:
+          app-id: ${{ secrets.FYNNESTLADY_APP_ID }}
+          private-key: ${{ secrets.FYNNESTLADY_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+      - name: Squash merge eligible PR and delete branch
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+          BOT_PR_NUMBER: ${{ steps.pull.outputs.number }}
+          BOT_SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+          BOT_EVIDENCE_PATH: ${{ github.workspace }}/evidence/bot-evidence.json
+          BOT_TARGET_DIR: ${{ github.workspace }}/candidate
+        run: node scripts/bot.mjs merge-dev

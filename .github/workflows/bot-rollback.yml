@@ -1,0 +1,84 @@
+name: Bot rollback
+on:
+  workflow_run:
+    workflows: [Post deployment smoke]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      deployment_id:
+        description: Failed production deployment identifier
+        required: true
+        type: string
+permissions:
+  actions: read
+  contents: read
+  deployments: read
+env:
+  FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
+  FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
+concurrency:
+  group: bot-rollback-${{ github.event.workflow_run.id || inputs.deployment_id }}
+  cancel-in-progress: false
+jobs:
+  assess:
+    if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' && vars.FYNNESTLADY_PRODUCTION_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'failure') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Gemini incident assessment
+        id: gemini_incident
+        uses: google-github-actions/run-gemini-cli@v0
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          prompt: |
+            Follow the instructions in .github/codex/prompts/incident-response.md to assess the incident in read-only mode.
+          settings: |
+            {
+              "telemetry": { "enabled": false }
+            }
+      - name: Write incident assessment artifact
+        env:
+          GEMINI_INCIDENT_OUTPUT: ${{ steps.gemini_incident.outputs.gemini_response }}
+        run: |
+          if [ -n "$GEMINI_INCIDENT_OUTPUT" ]; then
+            printf '%s\n' "$GEMINI_INCIDENT_OUTPUT" > incident-assessment.txt
+          fi
+          test -s incident-assessment.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: incident-${{ github.run_id }}
+          path: incident-assessment.txt
+          if-no-files-found: error
+          retention-days: 90
+  rollback:
+    needs: assess
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Verify safe rollback criteria
+        env:
+          BOT_DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+          BOT_FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/bot.mjs production-gate
+      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        id: app
+        with:
+          app-id: ${{ secrets.FYNNESTLADY_APP_ID }}
+          private-key: ${{ secrets.FYNNESTLADY_APP_PRIVATE_KEY }}
+          permission-deployments: write
+          permission-issues: write
+      - name: Roll back safe application deployment or raise incident
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+          BOT_DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+          BOT_FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: node scripts/bot.mjs rollback

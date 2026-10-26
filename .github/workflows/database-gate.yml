@@ -1,0 +1,43 @@
+name: Database gate
+on:
+  pull_request:
+    branches: [dev, main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to validate
+        required: true
+        type: number
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: database-gate-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  database-gate:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out trusted controller
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          persist-credentials: false
+      - name: Check out candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate database gate
+        env:
+          BOT_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          BOT_TARGET_DIR: ${{ github.workspace }}/candidate
+        run: node scripts/bot.mjs database
+      - name: Failure summary
+        if: failure()
+        run: echo "::error::Database gate failed; inspect this run and the PR evidence." >> "$GITHUB_STEP_SUMMARY"

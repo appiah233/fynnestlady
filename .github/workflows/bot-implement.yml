@@ -1,0 +1,179 @@
+name: Bot implement
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Existing issue number with bot branch
+        required: true
+        type: number
+      branch_name:
+        description: Existing bot-owned branch
+        required: true
+        type: string
+permissions:
+  contents: read
+  issues: read
+env:
+  FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
+  FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
+concurrency:
+  group: bot-implement-${{ inputs.issue_number }}
+  cancel-in-progress: false
+jobs:
+  implement:
+    if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Reject unexpected branch reference
+        shell: bash
+        env:
+          BOT_BRANCH_NAME: ${{ inputs.branch_name }}
+          BOT_ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: |
+          set -euo pipefail
+          [[ "$BOT_BRANCH_NAME" =~ ^(feature|fix|security|chore)/[0-9]+-[a-z0-9-]+$ ]]
+          [[ "$BOT_BRANCH_NAME" =~ ^(feature|fix|security|chore)/${BOT_ISSUE_NUMBER}- ]]
+      - name: Check out trusted controller and prompts
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          persist-credentials: false
+      - name: Check out issue branch as data
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.branch_name }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate issue and architecture
+        env:
+          BOT_ISSUE_NUMBER: ${{ inputs.issue_number }}
+          BOT_TARGET_DIR: ${{ github.workspace }}/candidate
+        run: node scripts/bot.mjs policy
+      - name: Fetch issue context into candidate
+        env:
+          BOT_ISSUE_NUMBER: ${{ inputs.issue_number }}
+          BOT_CONTEXT_PATH: ${{ github.workspace }}/candidate/.bot-task.md
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/bot.mjs task-context
+      - name: Gemini implementation
+        id: gemini_impl
+        uses: google-github-actions/run-gemini-cli@v0
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          prompt: |
+            Operate only inside the ./candidate directory. Follow the instructions in .github/codex/prompts/implementation.md and implement the task described in ./candidate/.bot-task.md.
+          settings: |
+            {
+              "telemetry": { "enabled": false }
+            }
+      - name: Capture patch
+        shell: bash
+        env:
+          GEMINI_IMPL_OUTPUT: ${{ steps.gemini_impl.outputs.gemini_response }}
+        run: |
+          set -euo pipefail
+          if [ -n "$GEMINI_IMPL_OUTPUT" ]; then
+            printf '%s\n' "$GEMINI_IMPL_OUTPUT" > bot-implementation.txt
+          else
+            echo "Gemini implementation completed" > bot-implementation.txt
+          fi
+          rm -f candidate/.bot-task.md
+          rm -rf candidate/.gemini
+          git -C candidate add -N .
+          git -C candidate diff --binary > bot.patch
+          test -s bot.patch || { echo "::error::Gemini produced no changes"; exit 1; }
+          git -C candidate diff --check
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: bot-implementation-${{ inputs.issue_number }}
+          path: |
+            bot.patch
+            bot-implementation.txt
+          if-no-files-found: error
+          retention-days: 14
+  validate:
+    needs: implement
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out trusted controller
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          persist-credentials: false
+      - name: Check out target branch as data
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.branch_name }}
+          path: candidate
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093a
+        with:
+          name: bot-implementation-${{ inputs.issue_number }}
+          path: bot-artifact
+      - name: Validate patch and run gates
+        shell: bash
+        env:
+          BOT_ISSUE_NUMBER: ${{ inputs.issue_number }}
+          BOT_TARGET_DIR: ${{ github.workspace }}/candidate
+        run: |
+          set -euo pipefail
+          git -C candidate apply --check "$GITHUB_WORKSPACE/bot-artifact/bot.patch"
+          git -C candidate apply "$GITHUB_WORKSPACE/bot-artifact/bot.patch"
+          node scripts/bot.mjs policy
+          node scripts/bot.mjs quality
+          node scripts/bot.mjs security
+          node scripts/bot.mjs database
+          node scripts/bot.mjs accessibility
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Reject unexpected branch reference
+        shell: bash
+        env:
+          BOT_BRANCH_NAME: ${{ inputs.branch_name }}
+          BOT_ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: |
+          set -euo pipefail
+          [[ "$BOT_BRANCH_NAME" =~ ^(feature|fix|security|chore)/[0-9]+-[a-z0-9-]+$ ]]
+          [[ "$BOT_BRANCH_NAME" =~ ^(feature|fix|security|chore)/${BOT_ISSUE_NUMBER}- ]]
+      - name: Check out trusted controller
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          persist-credentials: false
+      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        id: app
+        with:
+          app-id: ${{ secrets.FYNNESTLADY_APP_ID }}
+          private-key: ${{ secrets.FYNNESTLADY_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-issues: write
+          permission-actions: write
+      - name: Check out target branch as data
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.branch_name }}
+          path: candidate
+          token: ${{ steps.app.outputs.token }}
+          persist-credentials: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093a
+        with:
+          name: bot-implementation-${{ inputs.issue_number }}
+          path: bot-artifact
+      - name: Commit and push to issue branch
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+          BOT_ISSUE_NUMBER: ${{ inputs.issue_number }}
+          BOT_TARGET_DIR: ${{ github.workspace }}/candidate
+          BOT_PATCH_PATH: ${{ github.workspace }}/bot-artifact/bot.patch
+        run: node scripts/bot.mjs publish-patch
+      - name: Dispatch PR creation
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          BOT_ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: gh workflow run bot-open-pr.yml --ref dev -f issue_number="$BOT_ISSUE_NUMBER"

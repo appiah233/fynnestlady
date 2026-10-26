@@ -1,0 +1,53 @@
+name: Dependency governor
+on:
+  schedule:
+    - cron: '13 6 * * 1'
+  pull_request:
+    branches: [dev]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pull-requests: read
+env:
+  FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
+  FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
+concurrency:
+  group: dependency-governor-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  inspect:
+    if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || 'dev' }}
+          persist-credentials: false
+      - name: Audit dependencies and avoid duplicate work
+        env:
+          BOT_PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/bot.mjs dependency
+  create-issues:
+    if: ${{ github.event_name != 'pull_request' && vars.FYNNESTLADY_BOT_ENABLED == 'true' }}
+    needs: inspect
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          persist-credentials: false
+      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        id: app
+        with:
+          app-id: ${{ secrets.FYNNESTLADY_APP_ID }}
+          private-key: ${{ secrets.FYNNESTLADY_APP_PRIVATE_KEY }}
+          permission-issues: write
+          permission-contents: read
+      - name: Create deduplicated remediation issues
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+        run: node scripts/bot.mjs dependency

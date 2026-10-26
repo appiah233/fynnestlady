@@ -1,0 +1,46 @@
+name: Bot intake
+on:
+  schedule:
+    - cron: '17 5,11,17 * * *'
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Work source (roadmap, failure, dependency, security)
+        required: false
+        default: roadmap
+permissions:
+  contents: read
+env:
+  FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
+  FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
+concurrency:
+  group: bot-intake
+  cancel-in-progress: false
+jobs:
+  intake:
+    if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          persist-credentials: false
+      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        id: app
+        with:
+          app-id: ${{ secrets.FYNNESTLADY_APP_ID }}
+          private-key: ${{ secrets.FYNNESTLADY_APP_PRIVATE_KEY }}
+          permission-contents: read
+          permission-issues: write
+          permission-actions: write
+      - name: Deduplicate, budget and create eligible issue
+        id: intake
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+          BOT_SOURCE: ${{ inputs.source || 'roadmap' }}
+        run: node scripts/bot.mjs intake
+      - name: Report result
+        if: always()
+        run: |
+          echo "Intake result: ${{ steps.intake.outcome }}" >> "$GITHUB_STEP_SUMMARY"
