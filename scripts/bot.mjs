@@ -335,9 +335,31 @@ async function mergeDev(e) {
   await api(`pulls/${number}/merge`, { method: 'PUT', body: { merge_method: 'squash', sha: pr.head.sha, commit_title: `${pr.title} (#${number})` } });
   const merged = await api(`pulls/${number}`);
   assert(merged.merged === true, 'Merge API did not confirm merged state');
+  await closeIssueAfterMerge(issue.number, number);
   await api(`git/refs/heads/${pr.head.ref}`, { method: 'DELETE' }).catch(() => {});
   await output('merged_pr', number);
 }
+
+/**
+ * Closes the exact issue validated by the trusted evidence manifest after its PR merges.
+ * @param {number} issueNumber - Linked issue number from the validated evidence manifest.
+ * @param {number} pullRequestNumber - Successfully merged pull request number.
+ */
+async function closeIssueAfterMerge(issueNumber, pullRequestNumber) {
+  assert(Number.isSafeInteger(issueNumber) && issueNumber > 0, 'A valid linked issue is required to close work');
+  const issue = await api(`issues/${issueNumber}`);
+  assert(!issue.pull_request, 'Linked item is a pull request, not an issue');
+  if (issue.state === 'closed') return;
+  await api(`issues/${issueNumber}`, {
+    method: 'PATCH',
+    body: { state: 'closed', state_reason: 'completed' },
+  });
+  await api(`issues/${issueNumber}/comments`, {
+    method: 'POST',
+    body: { body: `Closed as completed after the Fynnestlady Engineering Bot verified and merged PR #${pullRequestNumber}.` },
+  });
+}
+
 /**
  * Evaluates and safely merges older PRs targeting `dev` if and only if
  * they do not harm current application status, foundation contracts, or stability.
@@ -357,8 +379,9 @@ async function mergeOldPr(e) {
   const mergedList = [];
   for (let pr of prsToEvaluate) {
     const number = pr.number;
-    for (let i = 0; i < 6 && pr.mergeable === null; i++) {
-      await new Promise(r => setTimeout(r, 2500));
+    pr = await api(`pulls/${number}`);
+    for (let i = 0; i < 6 && (pr.mergeable === null || pr.mergeable === undefined); i++) {
+      await new Promise(r => setTimeout(r, 2000));
       pr = await api(`pulls/${number}`);
     }
     const files = await api(`pulls/${number}/files?per_page=100`);
@@ -391,7 +414,8 @@ async function mergeOldPr(e) {
     }
 
     // Merge safely
-    await api(`pulls/${number}/merge`, {
+    try {
+      await api(`pulls/${number}/merge`, {
       method: 'PUT',
       body: {
         merge_method: 'squash',
@@ -407,6 +431,9 @@ async function mergeOldPr(e) {
       await api(`issues/${number}/comments`, { method: 'POST', body: { body: successComment } });
       await api(`git/refs/heads/${pr.head.ref}`, { method: 'DELETE' }).catch(() => {});
       mergedList.push(number);
+    }
+    } catch (err) {
+      process.stdout.write(`Failed to merge PR #${number}: ${err.message}\n`);
     }
   }
   await output('merged_prs', mergedList.join(','));
