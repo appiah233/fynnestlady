@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { platformSafetyViolations } from "./bot-core.mjs";
@@ -138,4 +138,13 @@ const lines = [
 ];
 
 console.log(lines.join("\n"));
+
+// Machine-readable findings so the final bot review can explain exactly why it blocks a PR.
+if (process.env.INSPECTION_FINDINGS_PATH) {
+  writeFileSync(
+    process.env.INSPECTION_FINDINGS_PATH,
+    `${JSON.stringify({ verdict, findings: allIssues, changedFiles: changedPaths.length }, null, 2)}\n`
+  );
+}
+
 if (allIssues.length > 0) process.exitCode = 1;

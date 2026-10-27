@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { architectureViolations, branchForIssue, canMergeDev, nextRetry, platformSafetyViolations, requiredReviews, validateEvidence } from './bot-core.mjs';
+import { architectureViolations, branchForIssue, canMergeDev, canMergeOldPr, latestReviewStates, nextRetry, platformSafetyViolations, requiredReviews, validateEvidence } from './bot-core.mjs';
 
 const command = process.argv[2];
 const repository = process.env.GITHUB_REPOSITORY || 'appiah233/fynnestlady';
@@ -327,14 +327,116 @@ async function mergeDev(e) {
   const files = await api(`pulls/${number}/files?per_page=100`);
   const roles = requiredReviews(files.map(f => f.filename));
   const checks = await checksFor(pr.head.sha);
+  // A standing "changes requested" review (including the bot's own) must block the merge.
+  pr.reviews = latestReviewStates(await api(`pulls/${number}/reviews?per_page=100`));
   const verdict = canMergeDev({ pr, checks, evidence, requiredReviews: roles, killSwitch: !enabled });
   assert(verdict.ok, `Merge blocked: ${verdict.reasons.join('; ')}`);
   assert(pr.mergeable === true, 'GitHub has not established mergeability');
   await api(`pulls/${number}/merge`, { method: 'PUT', body: { merge_method: 'squash', sha: pr.head.sha, commit_title: `${pr.title} (#${number})` } });
   const merged = await api(`pulls/${number}`);
   assert(merged.merged === true, 'Merge API did not confirm merged state');
+  await closeIssueAfterMerge(issue.number, number);
   await api(`git/refs/heads/${pr.head.ref}`, { method: 'DELETE' }).catch(() => {});
   await output('merged_pr', number);
+}
+
+/**
+ * Closes the exact issue validated by the trusted evidence manifest after its PR merges.
+ * @param {number} issueNumber - Linked issue number from the validated evidence manifest.
+ * @param {number} pullRequestNumber - Successfully merged pull request number.
+ */
+async function closeIssueAfterMerge(issueNumber, pullRequestNumber) {
+  assert(Number.isSafeInteger(issueNumber) && issueNumber > 0, 'A valid linked issue is required to close work');
+  const issue = await api(`issues/${issueNumber}`);
+  assert(!issue.pull_request, 'Linked item is a pull request, not an issue');
+  if (issue.state === 'closed') return;
+  await api(`issues/${issueNumber}`, {
+    method: 'PATCH',
+    body: { state: 'closed', state_reason: 'completed' },
+  });
+  await api(`issues/${issueNumber}/comments`, {
+    method: 'POST',
+    body: { body: `Closed as completed after the Fynnestlady Engineering Bot verified and merged PR #${pullRequestNumber}.` },
+  });
+}
+
+/**
+ * Evaluates and safely merges older PRs targeting `dev` if and only if
+ * they do not harm current application status, foundation contracts, or stability.
+ * @param {object} e - GitHub event payload.
+ */
+async function mergeOldPr(e) {
+  active();
+  const prNum = prNumber(e);
+  const prsToEvaluate = [];
+  if (Number.isSafeInteger(prNum) && prNum > 0) {
+    prsToEvaluate.push(await api(`pulls/${prNum}`));
+  } else {
+    const openPulls = await api('pulls?state=open&base=dev&per_page=100');
+    prsToEvaluate.push(...openPulls);
+  }
+
+  const mergedList = [];
+  for (let pr of prsToEvaluate) {
+    const number = pr.number;
+    pr = await api(`pulls/${number}`);
+    for (let i = 0; i < 6 && (pr.mergeable === null || pr.mergeable === undefined); i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      pr = await api(`pulls/${number}`);
+    }
+    const files = await api(`pulls/${number}/files?per_page=100`);
+    const fileContents = files.map(f => f.patch || '');
+    const checks = await checksFor(pr.head.sha);
+    const rawReviews = await api(`pulls/${number}/reviews?per_page=100`);
+    pr.reviews = latestReviewStates(rawReviews);
+
+    const verdict = canMergeOldPr({
+      pr,
+      files,
+      fileContents,
+      checks,
+      killSwitch: !enabled,
+    });
+
+    if (!verdict.ok) {
+      process.stdout.write(`PR #${number} cannot be safely merged: ${verdict.reasons.join('; ')}\n`);
+      const commentBody = [
+        `## ⚠️ Fynnestlady Engineering Bot: Merge Safety Evaluation`,
+        '',
+        `Cannot safely auto-merge **PR #${number}** because it may harm current application status or violate safety rules:`,
+        '',
+        ...verdict.reasons.map(r => `- ${r}`),
+        '',
+        `*Please resolve these issues or update the branch before this PR can be merged.*`,
+      ].join('\n');
+      await api(`issues/${number}/comments`, { method: 'POST', body: { body: commentBody } });
+      continue;
+    }
+
+    // Merge safely
+    try {
+      await api(`pulls/${number}/merge`, {
+      method: 'PUT',
+      body: {
+        merge_method: 'squash',
+        sha: pr.head.sha,
+        commit_title: `${pr.title} (#${number})`,
+        commit_message: `Safely merged by Fynnestlady Engineering Bot after verifying no harm to current application status.`,
+      },
+    });
+    const merged = await api(`pulls/${number}`);
+    if (merged.merged) {
+      process.stdout.write(`PR #${number} successfully merged into dev\n`);
+      const successComment = `Merged by **Fynnestlady Engineering Bot** after verifying that candidate changes do not harm current application status, retain all foundation contracts, and pass platform safety.`;
+      await api(`issues/${number}/comments`, { method: 'POST', body: { body: successComment } });
+      await api(`git/refs/heads/${pr.head.ref}`, { method: 'DELETE' }).catch(() => {});
+      mergedList.push(number);
+    }
+    } catch (err) {
+      process.stdout.write(`Failed to merge PR #${number}: ${err.message}\n`);
+    }
+  }
+  await output('merged_prs', mergedList.join(','));
 }
 /**
  * Validates candidate files against the architecture policy.
@@ -692,7 +794,7 @@ async function roleReview() {
   await writeFile(outFile, `${JSON.stringify(verdict, null, 2)}\n`);
 }
 
-const handlers = { intake, branch: createBranch, 'task-context': taskContext, 'open-pr': openPr, 'merge-dev': mergeDev, policy: checkPolicy, quality, security, database, accessibility, evidence: evidenceGate, remediate, 'dev-health': devHealth, release, 'production-gate': productionGate, 'post-deployment-smoke': smoke, rollback, dependency, 'publish-patch': publishPatch, 'role-review': roleReview, 'free-implement': freeImplement, 'free-remediate': freeRemediate };
+const handlers = { intake, branch: createBranch, 'task-context': taskContext, 'open-pr': openPr, 'merge-dev': mergeDev, policy: checkPolicy, quality, security, database, accessibility, evidence: evidenceGate, remediate, 'dev-health': devHealth, release, 'production-gate': productionGate, 'post-deployment-smoke': smoke, rollback, dependency, 'publish-patch': publishPatch, 'role-review': roleReview, 'free-implement': freeImplement, 'free-remediate': freeRemediate, 'merge-old-pr': mergeOldPr };
 try {
   assert(command in handlers, `Unknown bot command: ${command}`);
   await handlers[command](await event());
