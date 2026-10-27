@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write
 
 jobs:
   inspect:
@@ -16,4 +16,39 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Inspect pull request evidence
-        run: node scripts/pr-inspection.mjs >> "$GITHUB_STEP_SUMMARY"
+        id: inspect
+        run: |
+          node scripts/pr-inspection.mjs | tee inspection-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Mint GitHub App token for PR review
+        if: ${{ always() && vars.FYNNESTLADY_USE_GITHUB_APP == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+        id: app
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        with:
+          app-id: ${{ secrets.FYNNESTLADY_APP_ID }}
+          private-key: ${{ secrets.FYNNESTLADY_APP_PRIVATE_KEY }}
+          permission-contents: read
+          permission-pull-requests: write
+      - name: Submit Fynnestlady Engineering Bot review on PR
+        if: ${{ always() && steps.app.outputs.token != '' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+          INSPECT_OUTCOME: ${{ steps.inspect.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BODY="$(cat inspection-summary.md)"
+          if [ "$INSPECT_OUTCOME" = "success" ]; then
+            EVENT="COMMENT"
+          else
+            EVENT="REQUEST_CHANGES"
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
+            -f commit_id="$COMMIT_SHA" \
+            -f event="$EVENT" \
+            -f body="$BODY" || \
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
+            -f commit_id="$COMMIT_SHA" \
+            -f event="COMMENT" \
+            -f body="$BODY"

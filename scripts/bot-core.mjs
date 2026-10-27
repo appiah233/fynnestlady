@@ -49,6 +49,94 @@ export function architectureViolations(paths = [], texts = []) {
 }
 
 /**
+ * Evaluates proposed file changes for platform-endangering or non-compliant patterns
+ * across architecture, authentication (Clerk-only), database migrations, client/server
+ * boundaries, secret hygiene, XSS/code-execution, and core governance rules.
+ * @param {string[]} [paths=[]] - Relative file paths.
+ * @param {string[]} [texts=[]] - File text contents matching `paths`.
+ * @returns {string[]} List of platform safety and compliance violations found.
+ */
+export function platformSafetyViolations(paths = [], texts = []) {
+  const violations = [...architectureViolations(paths, texts)];
+  const exempt = new Set([
+    'scripts/bot-core.mjs',
+    'scripts/pr-inspection.mjs',
+    'scripts/scan-secrets.mjs',
+    'scripts/validate-foundation.mjs',
+    'tests/bot-cli.test.mjs',
+    'tests/bot-core.test.mjs',
+    'tests/security/browser-boundary.test.mjs',
+  ]);
+
+  for (let i = 0; i < paths.length; i++) {
+    const path = String(paths[i]).replace(/\\/g, '/');
+    const text = String(texts[i] ?? '');
+    if (exempt.has(path)) continue;
+
+    // 1. Committed secret or credential files
+    if (/(?:^|\/)\.env(?:\.(?!example$)[a-z0-9._-]+)?$|\.(?:pem|key|p12|pfx)$/i.test(path)) {
+      violations.push(`${path}: Forbidden credential or environment file tracked in repository`);
+    }
+
+    // 2. Governance & owner authority protection
+    if (path === 'RULES.md') {
+      if (!text.includes('Eric Appiah Owusu')) {
+        violations.push('RULES.md: Owner authority (Eric Appiah Owusu) must not be removed');
+      }
+      if (!text.includes('server controls prices')) {
+        violations.push('RULES.md: Server-authoritative pricing rule must not be removed');
+      }
+      if (!text.includes('`main` is the production branch; `dev` is the integration branch')) {
+        violations.push('RULES.md: Permanent branch model (main/dev) must not be removed');
+      }
+    }
+
+    // 3. Database migration safety (no destructive DDL/DML or disabling RLS)
+    if (/(?:^|\/)(?:supabase\/migrations|migrations)\/.*\.sql$/i.test(path)) {
+      if (/\bDROP\s+(?:TABLE|SCHEMA|DATABASE)\b/i.test(text)) {
+        violations.push(`${path}: Destructive SQL (DROP TABLE/SCHEMA/DATABASE) is prohibited in migrations`);
+      }
+      if (/\bTRUNCATE\s+TABLE\b|\bTRUNCATE\s+[a-z0-9_."]+/i.test(text)) {
+        violations.push(`${path}: Destructive SQL (TRUNCATE) is prohibited in migrations`);
+      }
+      if (/\bDISABLE\s+ROW\s+LEVEL\s+SECURITY\b/i.test(text)) {
+        violations.push(`${path}: Disabling Row-Level Security (RLS) is prohibited`);
+      }
+      if (/\bDELETE\s+FROM\s+[a-z0-9_."]+\s*;/i.test(text)) {
+        violations.push(`${path}: Unqualified DELETE FROM without WHERE clause is prohibited`);
+      }
+    }
+
+    // 4. Application code compliance (src/**)
+    if (/^src\/.*\.(?:ts|tsx|js|jsx|mjs)$/i.test(path)) {
+      // Clerk-only authentication compliance (ADR-006)
+      if (/\bsupabase\.auth\.(?:signIn|signUp|signOut|exchangeCodeForSession|setSession)|@supabase\/auth-helpers/i.test(text)) {
+        violations.push(`${path}: Supabase Auth is prohibited (Clerk is the sole authentication provider per ADR-006)`);
+      }
+
+      // Unsafe execution / XSS
+      if (/\bdangerouslySetInnerHTML\b|\beval\s*\(|\bnew\s+Function\s*\(/.test(text)) {
+        violations.push(`${path}: Unsafe code execution or dangerouslySetInnerHTML is prohibited`);
+      }
+
+      // Client/browser boundary protection
+      const isClientModule =
+        /^\s*["']use client["']/m.test(text) || /^src\/lib\/supabase\/browser\.ts$/i.test(path);
+      if (isClientModule) {
+        if (/\b(?:SUPABASE_SERVICE_ROLE_KEY|CLERK_SECRET_KEY|PAYSTACK_SECRET_KEY|DATABASE_URL)\b/.test(text)) {
+          violations.push(`${path}: Client module references server-only secret environment variable`);
+        }
+        if (/from\s+["'](?:@\/lib\/supabase\/server|server-only)["']/.test(text)) {
+          violations.push(`${path}: Client module imports server-only module`);
+        }
+      }
+    }
+  }
+
+  return [...new Set(violations)];
+}
+
+/**
  * Determines which specialist review roles are required for the given changed file paths.
  * @param {string[]} [paths=[]] - Relative file paths.
  * @returns {string[]} Ordered list of required specialist agent role names.
@@ -95,6 +183,9 @@ export function canMergeDev({ pr, checks = {}, evidence, requiredReviews: review
   reasons.push(...checked.reasons);
   for (const check of REQUIRED_CHECKS) if (checks[check] !== 'success') reasons.push(`${check} is not successful`);
   if (pr?.requested_reviewers?.length) reasons.push('Review requests remain');
+  if (Array.isArray(pr?.reviews) && pr.reviews.some(r => r?.state === 'CHANGES_REQUESTED')) {
+    reasons.push('Changes requested in review');
+  }
   if (pr?.mergeable_state && pr.mergeable_state !== 'clean') reasons.push(`PR merge state is ${pr.mergeable_state}`);
   return { ok: reasons.length === 0, reasons };
 }
