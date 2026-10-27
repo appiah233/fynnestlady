@@ -13,6 +13,8 @@ The adjacent JSON is the requested GitHub App manifest. It is a registration inp
 
 `contents: write` enables branch updates and ordinary PR merges; `issues: write` enables the backlog and incident reports; `pull_requests: write` enables PR creation, merge, and release comments; `actions: write` enables dispatch/rerun; `workflows: write` is needed for the first assigned CI workflow repair; `checks`, `statuses`, and `deployments` are read only for verification. Vercel rollback uses the separate, project-scoped Vercel token; the GitHub App token does not control hosting credentials. GitHub grants `metadata: read` for repository metadata. The App requests no Administration or organization/user/billing permission.
 
+With both `FYNNESTLADY_BOT_ENABLED=true` and `FYNNESTLADY_USE_GITHUB_APP=true`, `.github/workflows/bot-sync-pr-branches.yml` automatically merges the latest `dev` into eligible same-repository bot work PR branches when GitHub marks them behind, then GitHub's `synchronize` event reruns CI. It needs the App's `contents: write`, `pull_requests: write`, and `issues: write` permissions. Merge conflicts receive a bot comment and require manual conflict resolution; PRs targeting `main` are intentionally excluded.
+
 ## Kill switch and revocation
 
 Disable the bot's scheduled and mutation workflows, then suspend the App installation in GitHub. For suspected credential compromise, revoke/delete the App private key, rotate the `GEMINI_API_KEY` credential and any development credentials exposed to that trust boundary, review recent App-authored commits/runs, and only re-enable after clean tokens and evidence. Uninstall the App to revoke repository access entirely. Preserve incident logs without secrets.
