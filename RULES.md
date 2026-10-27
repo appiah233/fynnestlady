@@ -2,11 +2,11 @@
 
 ## Authority
 
-Eric Appiah Owusu is the project owner and final merge authority.
+Eric Appiah Owusu is the project owner and retains authority over architecture exceptions, risk acceptance, credentials, and branch-protection changes. The owner has authorized Fynnestlady Engineering Bot to perform routine dev merges and later routine release merges after every required gate passes. During initial control-plane validation, the bot may not merge main or deploy production.
 
-AI agents may plan, investigate, create branches, implement, test, review, inspect pull requests, comment, recommend, and request changes. AI agents may not merge pull requests, enable auto-merge, bypass required checks, approve their own change as owner, alter repository governance without authorization, or deploy to production without authorization.
+AI agents may plan, investigate, create branches, implement, test, review, inspect pull requests, comment, recommend, and request changes. Only the dedicated GitHub App may automatically merge eligible routine work, using its own identity and the reviewed gate controller. Agents may not bypass required checks, approve their own change as an independent reviewer, alter branch protection, or expose production secrets to Gemini/Codex.
 
-Final merge authority belongs exclusively to Eric Appiah Owusu.
+No automation may weaken branch protection to make a merge possible. The current code-owner approval rule may block automated merges until an owner-authorized governance change establishes an independent bot-compatible approval path.
 
 ## Mandatory Reading
 
@@ -36,7 +36,7 @@ Before implementation, define the problem and current state; identify scope, non
 - Do not build directly on `main`.
 - `main` is the production branch; `dev` is the integration branch.
 - Working branches normally target `dev`; reviewed release pull requests promote `dev` to `main`.
-- Agents and bots may not merge, squash-merge, rebase-merge, enable auto-merge, force-push, or silently promote either permanent branch.
+- The dedicated bot may squash-merge into `dev` only after required checks, independent evidence, and GitHub branch protection pass. Routine release promotion to `main` additionally requires the production gate and is disabled during initial control-plane validation. Force pushes and bypasses remain prohibited.
 
 ## Evidence
 
@@ -69,6 +69,6 @@ DatabaseAgent reviews material schema changes. Migrations require safety and rol
 
 ## Deployment
 
-No deployment from an unreviewed pull request. No autonomous production deployment without explicit owner authorization.
+No deployment from an unreviewed pull request. Automated production promotion and deployment remain disabled during initial control-plane validation. Later routine production operation requires all documented production gates and the dedicated bot identity; listed safety exceptions stop for owner decision.
 
-Production candidates originate only from approved `main` revisions through a protected production environment with explicit owner deployment approval. Pull-request code and the production EC2 host must never serve as a general-purpose CI runner with production credentials.
+Production candidates originate only from approved `main` revisions through a protected production environment. Pull-request code must never receive production credentials. AWS and EC2 hosting are outside the approved target architecture.

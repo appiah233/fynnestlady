@@ -2,7 +2,7 @@
 
 ## Authority
 
-Eric Appiah Owusu owns product decisions, risk acceptance, production authorization, and merges. Agents advise and execute within assigned scope; they do not merge or deploy autonomously.
+Eric Appiah Owusu owns product decisions and exception risk acceptance. His 2026-10-26 instruction authorizes Fynnestlady Engineering Bot to operate routine engineering and release merges through protected gates. Production deployment remains disabled during initial control-plane validation; later routine deployment requires all production gates and the configured protected environment. See ADR-014.
 
 ## Required Roles
 
@@ -13,7 +13,7 @@ Eric Appiah Owusu owns product decisions, risk acceptance, production authorizat
 - **DesignAgent:** mandatory before every storefront, admin UI, UX, checkout, account, responsive, or visual-system change.
 - **Implementation agent:** implements only reviewed, bounded work.
 - **TestingAgent:** independently verifies critical behavior and does not rely solely on implementer evidence.
-- **FynnestladyPRBot:** inspects pull requests and returns a constrained verdict; it cannot merge.
+- **FynnestladyPRBot:** existing read-only inspector. Its verdict is evidence for the distinct Fynnestlady Engineering Bot merge controller; it does not merge.
 
 One agent may document multiple perspectives during foundation work, but must record each role's analysis and cannot waive required independent review for implementation or release.
 
@@ -28,11 +28,11 @@ One agent may document multiple perspectives during foundation work, but must re
 7. Run proportionate validation and attach evidence.
 8. Open a pull request using the template.
 9. Obtain independent TestingAgent and FynnestladyPRBot inspection.
-10. Eric reviews and alone decides whether to merge or release.
+10. The engineering bot merges eligible routine PRs after independent evidence and protected gates. Eric decides enumerated exceptions and governance changes.
 
 ## Branches and Commits
 
-`main` and `dev` are permanent. `main` is production; `dev` is deployable integration. Never implement directly on either. Use short-lived branches such as `docs/*`, `feat/*`, `fix/*`, or `security/*`, normally opening PRs to `dev`. Release PRs promote an exact verified `dev` SHA to `main`. Force pushes, branch deletion, autonomous promotion, and agent/bot merges are prohibited. Use conventional commit prefixes: `feat`, `fix`, `security`, `refactor`, `test`, `docs`, `chore`, `perf`, and `ci`.
+`main` and `dev` are permanent. `main` is production; `dev` is deployable integration. Never implement directly on either. Bot work branches use `feature/`, `fix/`, `security/`, or `chore/` plus issue number and description, originate from `dev`, and target `dev`. Release PRs promote an exact verified `dev` SHA to `main`. The bot may squash-merge only eligible PRs through branch protection and may delete its merged work branch. Force pushes, deletion of permanent branches, and protection bypass remain prohibited. Use conventional commit prefixes: `feat`, `fix`, `security`, `refactor`, `test`, `docs`, `chore`, `perf`, and `ci`.
 
 ## Decision Governance
 
@@ -48,7 +48,7 @@ Material architecture choices require an ADR with context, options, decision sta
 
 ## Pull Requests and Deployment
 
-Pull requests to `dev` and `main` require complete scope, impact, evidence, risk, rollback, and coordination information plus fail-closed CI. Release PRs identify the exact `dev` SHA, included changes, migrations, security impact, known risks, rollback, evidence, and owner decisions. The PR bot may report `PASS FOR OWNER REVIEW`, `CHANGES REQUIRED`, `BLOCKED`, or `INSUFFICIENT EVIDENCE`; never merge approval. Production deployment requires an approved `main` revision, passing release gates, an immutable artifact, a protected production environment, rollback plan, and explicit owner authorization.
+Pull requests to `dev` and `main` require complete scope, impact, evidence, risk, rollback, and coordination information plus fail-closed CI. Release PRs identify the exact `dev` SHA, included changes, migrations, security impact, known risks, rollback, evidence, and decisions. The existing PR inspector's verdict never substitutes for independent review or required checks. The engineering bot may merge routine releases only after production gates pass and no exception applies. Production deployment requires an approved `main` revision, passing release gates, immutable artifact, protected production environment, rollback plan, and applicable environment authorization. The initial bot validation stops before production.
 
 ## Incidents and Rollback
 
@@ -64,4 +64,4 @@ A task is ready when its owner, business outcome, scope, non-goals, acceptance c
 
 ## Definition of Done
 
-A task is done when acceptance criteria are met; required reviews and tests pass; security, accessibility, data, and operational impacts are addressed; documentation and coordination records are current; evidence is attached; known limitations are explicit; and the work is ready for Eric's review. Merge and production release are separate owner decisions.
+A task is done when acceptance criteria are met; required reviews and tests pass; security, accessibility, data, and operational impacts are addressed; documentation and coordination records are current; evidence is attached; and known limitations are explicit. Merge and production release are separate gated operations. Exceptions require Eric's decision.

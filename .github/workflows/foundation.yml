@@ -13,21 +13,42 @@ jobs:
   governance:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Validate foundation
-        run: node scripts/validate-foundation.mjs
-      - name: Detect whitespace errors
-        run: git diff --check HEAD^ HEAD || git diff --check --cached
+      - name: Check out trusted validator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: dev
+          persist-credentials: false
+      - name: Check out candidate as data
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate candidate foundation
+        working-directory: candidate
+        run: node "$GITHUB_WORKSPACE/scripts/validate-foundation.mjs"
+      - name: Detect candidate whitespace errors
+        working-directory: candidate
+        env:
+          BASE_BRANCH: ${{ github.base_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "$BASE_BRANCH" ]; then
+            git diff --check "origin/$BASE_BRANCH...HEAD"
+          else
+            git diff --check HEAD^ HEAD
+          fi
 
   proposed-engineering-gates:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Set up Node.js
         if: ${{ hashFiles('package.json') != '' }}
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version-file: .nvmrc
           cache: npm
