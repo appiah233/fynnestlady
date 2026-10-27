@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">
+  <defs>
+    <linearGradient id="a" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f5efe8"/>
+      <stop offset="100%" stop-color="#efe4d7"/>
+    </linearGradient>
+    <pattern id="g" width="40" height="40" patternType="userSpaceOnUse">
+      <path d="M0 40h40V0" fill="none" stroke="#d9d0c7" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="600" height="600" fill="url(#a)"/>
+  <rect x="22" y="22" width="556" height="556" fill="none" stroke="#d9d0c7" stroke-width="2" rx="24"/>
+  <circle cx="300" cy="210" r="70" fill="#e2d8ce"/>
+  <path d="M200 355 Q300 355 300 420 T400 355" fill="none" stroke="#c3b6a8" stroke-width="2"/>
+  <text x="300" y="470" font-family="Georgia, serif" font-size="20" fill="#8d8279" text-anchor="middle">Fynnestlady</text>
+  <text x="300" y="498" font-family="Arial, sans-serif" font-size="13" fill="#a6988a" text-anchor="middle">development placeholder</text>
+</svg>

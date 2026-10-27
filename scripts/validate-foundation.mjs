@@ -29,12 +29,13 @@ for (const path of required) {
 
 function files(directory) {
   return readdirSync(directory).flatMap((name) => {
+    if ([".git", "node_modules", ".next", "coverage", "playwright-report", "test-results", ".npm-cache"].includes(name)) return [];
     const path = join(directory, name);
     return statSync(path).isDirectory() ? files(path) : [path];
   });
 }
 
-const textFiles = files(root).filter((path) => !path.includes(`${join(root, ".git")}`) && /\.(md|yml|yaml|json|mjs)$/.test(path));
+const textFiles = files(root).filter((path) => /\.(md|yml|yaml|json|mjs)$/.test(path));
 const forbidden = [
   [new RegExp(["pick", "sy"].join(""), "gi"), "legacy project reference"],
   [/AKIA[0-9A-Z]{16}/g, "possible AWS access key"],

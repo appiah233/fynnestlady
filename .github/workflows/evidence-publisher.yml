@@ -1,0 +1,172 @@
+name: Evidence gate
+on:
+  pull_request:
+    branches: [dev, main]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to validate
+        required: true
+        type: number
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+concurrency:
+  group: evidence-gate-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  roles:
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - role: ArchitectAgent
+            prompt: architecture-review.md
+          - role: ProductAgent
+            prompt: product-review.md
+          - role: DatabaseAgent
+            prompt: database-review.md
+          - role: SecurityAgent
+            prompt: security-review.md
+          - role: DesignAgent
+            prompt: design-review.md
+          - role: TestingAgent
+            prompt: test-verification.md
+    steps:
+      - name: Check out trusted prompts and schema
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          persist-credentials: false
+      - name: Check out reviewed head as data
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prepare review output
+        run: mkdir -p reviews
+      - name: Independent ${{ matrix.role }} review (Gemini CLI free tier when key configured)
+        id: gemini_review
+        if: ${{ vars.FYNNESTLADY_USE_GEMINI_API == 'true' }}
+        uses: google-github-actions/run-gemini-cli@v0
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          prompt: |
+            Inspect the candidate tree in ./candidate in read-only mode. Follow .github/codex/prompts/${{ matrix.prompt }} and output ONLY a valid JSON object matching .github/fynnestlady/review-schema.json ({"status": "pass"|"fail", "findings": ["..."]}).
+          settings: |
+            {
+              "telemetry": { "enabled": false }
+            }
+      - name: Produce and validate structured ${{ matrix.role }} verdict
+        env:
+          BOT_REVIEW_ROLE: ${{ matrix.role }}
+          BOT_REVIEW_FILE: ${{ github.workspace }}/reviews/${{ matrix.role }}.json
+          BOT_TARGET_DIR: ${{ github.workspace }}/candidate
+          BOT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GEMINI_REVIEW_OUTPUT: ${{ steps.gemini_review.outputs.summary }}
+        run: |
+          if [ -f scripts/bot.mjs ]; then
+            node scripts/bot.mjs role-review
+          else
+            node candidate/scripts/bot.mjs role-review
+          fi
+          node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync(process.env.BOT_REVIEW_FILE,'utf8'));if(!['pass','fail'].includes(x.status)||x.headSha!==process.env.BOT_HEAD_SHA||!Array.isArray(x.findings)||!Array.isArray(x.evidence))process.exit(1)"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: role-${{ matrix.role }}
+          path: reviews/${{ matrix.role }}.json
+          if-no-files-found: error
+          retention-days: 30
+  evidence-gate:
+    needs: roles
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out trusted evidence assembler
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          persist-credentials: false
+      - name: Check out exact reviewed head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: role-*
+          path: reviews
+          merge-multiple: true
+      - name: Collect linked issue and successful gates
+        id: checks
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BOT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BOT_PR_BODY: ${{ github.event.pull_request.body }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          const match = /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?|issue)\s+#(\d+)/i.exec(process.env.BOT_PR_BODY || '');
+          if (!match) throw new Error('PR body must reference an open issue');
+          const issueNum = match[1];
+          const names = ['quality-gate', 'security-gate', 'database-gate', 'accessibility-gate', 'architecture-policy', 'governance', 'scan'];
+          const url = `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/commits/${process.env.BOT_HEAD_SHA}/check-runs?filter=latest&per_page=100`;
+          let runs = [];
+          for (let attempt = 0; attempt < 180; attempt++) {
+            const response = await fetch(url, { headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json' } });
+            if (!response.ok) throw new Error(`Cannot read check runs: ${response.status}`);
+            runs = (await response.json()).check_runs || [];
+            if (names.every(name => runs.some(item => item.name === name && item.conclusion === 'success'))) break;
+            if (runs.some(item => names.includes(item.name) && item.conclusion && item.conclusion !== 'success')) break;
+            await new Promise(r => setTimeout(r, 5000));
+          }
+          const evidence = names.map(name => {
+            const run = runs.find(item => item.name === name && item.conclusion === 'success');
+            if (!run) throw new Error(`Required successful check missing: ${name}`);
+            return { name, url: run.html_url, sha: process.env.BOT_HEAD_SHA };
+          });
+          appendFileSync(process.env.GITHUB_OUTPUT, `issue_number=${issueNum}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `tests=${JSON.stringify(evidence)}\n`);
+          NODE
+      - name: Assemble trusted evidence manifest
+        env:
+          BOT_REVIEW_DIR: ${{ github.workspace }}/reviews
+          BOT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BOT_ISSUE_NUMBER: ${{ steps.checks.outputs.issue_number }}
+          BOT_ROLLBACK: Revert the squash commit only after verifying migration and external effects.
+          BOT_TEST_EVIDENCE: ${{ steps.checks.outputs.tests }}
+          BOT_TARGET_DIR: ${{ github.workspace }}/candidate
+          BOT_EVIDENCE_PATH: ${{ github.workspace }}/bot-evidence.json
+        run: |
+          if [ -f scripts/bot-evidence.mjs ]; then
+            node scripts/bot-evidence.mjs assemble
+          else
+            node candidate/scripts/bot-evidence.mjs assemble
+          fi
+      - name: Validate manifest against reviewed head
+        env:
+          BOT_TARGET_DIR: ${{ github.workspace }}/candidate
+          BOT_EVIDENCE_PATH: ${{ github.workspace }}/bot-evidence.json
+        run: |
+          if [ -f scripts/bot.mjs ]; then
+            node scripts/bot.mjs evidence
+          else
+            node candidate/scripts/bot.mjs evidence
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: bot-evidence
+          path: bot-evidence.json
+          if-no-files-found: error
+          retention-days: 30
