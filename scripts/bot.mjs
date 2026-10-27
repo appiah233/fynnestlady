@@ -318,6 +318,11 @@ async function mergeDev(e) {
   const number = prNumber(e);
   assert(Number.isSafeInteger(number) && number > 0, 'PR number is required');
   let pr = await api(`pulls/${number}`);
+  if (pr.merged || pr.state === 'closed') {
+    process.stdout.write(`PR #${number} is already closed; no merge action is needed\n`);
+    await output('merged_pr', number);
+    return;
+  }
   for (let i = 0; i < 6 && pr.mergeable === null; i++) {
     await new Promise(r => setTimeout(r, 3000));
     pr = await api(`pulls/${number}`);
@@ -328,8 +333,16 @@ async function mergeDev(e) {
   const files = await api(`pulls/${number}/files?per_page=100`);
   const roles = requiredReviews(files.map(f => f.filename));
   const checks = await checksFor(pr.head.sha);
+  const rawReviews = await api(`pulls/${number}/reviews?per_page=100`);
+  const botLogin = `${process.env.FYNNESTLADY_APP_SLUG || 'fynnestlady-engineering-bot'}[bot]`;
+  const approvedHead = rawReviews.some(review => review.user?.login === botLogin && review.commit_id === pr.head.sha && review.state === 'APPROVED');
+  if (!approvedHead) {
+    process.stdout.write(`Merge deferred for PR #${number}: waiting for the Engineering Bot to approve current head ${pr.head.sha}\n`);
+    await output('merge_deferred', 'awaiting-bot-approval');
+    return;
+  }
   // A standing "changes requested" review (including the bot's own) must block the merge.
-  pr.reviews = latestReviewStates(await api(`pulls/${number}/reviews?per_page=100`));
+  pr.reviews = latestReviewStates(rawReviews);
   const verdict = canMergeDev({ pr, checks, evidence, requiredReviews: roles, killSwitch: !enabled });
   assert(verdict.ok, `Merge blocked: ${verdict.reasons.join('; ')}`);
   assert(pr.mergeable === true, 'GitHub has not established mergeability');
