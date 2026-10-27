@@ -112,6 +112,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           BOT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BOT_PR_BODY: ${{ github.event.pull_request.body }}
+          BOT_EVENT_ACTION: ${{ github.event.action }}
+          BOT_EVENT_TIME: ${{ github.event.pull_request.updated_at }}
         shell: bash
         run: |
           set -euo pipefail
@@ -122,18 +124,31 @@ jobs:
           const issueNum = match[1];
           const names = ['quality-gate', 'security-gate', 'database-gate', 'accessibility-gate', 'architecture-policy', 'governance', 'scan'];
           const url = `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/commits/${process.env.BOT_HEAD_SHA}/check-runs?filter=latest&per_page=100`;
-          let runs = [];
+          // An edited PR does not rerun the independent code gates; its unchanged
+          // head may use their latest success. Other PR events must use fresh runs.
+          const freshEvent = ['opened', 'synchronize', 'reopened', 'ready_for_review'].includes(process.env.BOT_EVENT_ACTION);
+          const eventTime = freshEvent ? Date.parse(process.env.BOT_EVENT_TIME || '') : 0;
+          if (freshEvent && !Number.isFinite(eventTime)) throw new Error('PR event timestamp is missing');
+          let latest = new Map();
           for (let attempt = 0; attempt < 180; attempt++) {
             const response = await fetch(url, { headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json' } });
             if (!response.ok) throw new Error(`Cannot read check runs: ${response.status}`);
-            runs = (await response.json()).check_runs || [];
-            if (names.every(name => runs.some(item => item.name === name && item.conclusion === 'success'))) break;
-            if (runs.some(item => names.includes(item.name) && item.conclusion && item.conclusion !== 'success')) break;
+            const runs = (await response.json()).check_runs || [];
+            latest = new Map();
+            for (const run of runs) {
+              if (freshEvent && Date.parse(run.started_at || run.created_at || '') < eventTime) continue;
+              const previous = latest.get(run.name);
+              if (!previous || Date.parse(run.started_at || run.created_at || '') > Date.parse(previous.started_at || previous.created_at || '') ||
+                  (run.started_at === previous.started_at && run.id > previous.id)) latest.set(run.name, run);
+            }
+            if (names.every(name => latest.get(name)?.conclusion === 'success')) break;
+            const failed = names.map(name => latest.get(name)).find(run => run?.status === 'completed' && run.conclusion && run.conclusion !== 'success');
+            if (failed) throw new Error(`Required current check ${failed.name} concluded ${failed.conclusion}`);
             await new Promise(r => setTimeout(r, 5000));
           }
           const evidence = names.map(name => {
-            const run = runs.find(item => item.name === name && item.conclusion === 'success');
-            if (!run) throw new Error(`Required successful check missing: ${name}`);
+            const run = latest.get(name);
+            if (run?.conclusion !== 'success') throw new Error(`Required successful current check missing: ${name}`);
             return { name, url: run.html_url, sha: process.env.BOT_HEAD_SHA };
           });
           appendFileSync(process.env.GITHUB_OUTPUT, `issue_number=${issueNum}\n`);
