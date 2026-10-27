@@ -20,6 +20,20 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: fynnestlady_test
+          POSTGRES_PASSWORD: local_ci_only
+          POSTGRES_DB: fynnestlady_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fynnestlady_test -d fynnestlady_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Check out trusted controller
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -33,11 +47,20 @@ jobs:
           path: candidate
           fetch-depth: 0
           persist-credentials: false
+      - name: Ensure PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
       - name: Validate database gate
         env:
           BOT_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
           BOT_TARGET_DIR: ${{ github.workspace }}/candidate
+          DATABASE_TEST_URL: postgresql://fynnestlady_test:local_ci_only@127.0.0.1:5432/fynnestlady_test
+          FYNNESTLADY_DATABASE_TEST_DISPOSABLE: '1'
         run: |
+          psql --version
           if [ -f scripts/bot.mjs ]; then
             node scripts/bot.mjs database
           else
