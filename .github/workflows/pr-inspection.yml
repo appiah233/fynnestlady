@@ -205,5 +205,7 @@ jobs:
             echo "No Engineering Bot approval for current head $HEAD_SHA; merge dispatch withheld."
             exit 1
           fi
-          gh workflow run bot-merge-dev.yml --ref dev -f pr_number="$PR_NUMBER"
+          payload=$(jq -cn --arg pr_number "$PR_NUMBER" '{ref: "dev", inputs: {pr_number: $pr_number}}')
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/bot-merge-dev.yml/dispatches" \
+            --method POST --input - <<< "$payload"
           echo "Dispatched the protected merge controller for PR #$PR_NUMBER after exact-head approval."
