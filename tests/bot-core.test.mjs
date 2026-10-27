@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {
   architectureViolations,
   branchForIssue,
-  canMergeDev,
-  nextRetry,
+  canMergeDev,  canMergeOldPr,  latestReviewStates,  nextRetry,
+  platformSafetyViolations,
   REQUIRED_CHECKS,
   requiredReviews,
   validateEvidence,
@@ -61,6 +61,11 @@ test('architecture policy flags unapproved production dependencies', () => {
     architectureViolations(['infra/deployment.yml'], ['hosting: EC2\nstorage: S3']).length,
     0,
     'infrastructure YAML must not bypass the architecture gate',
+  );
+  assert.deepEqual(
+    architectureViolations(['public/brand/logo.jpeg'], ['binary bytes containing EC2 and S3']),
+    [],
+    'binary brand assets must not be decoded as architecture text',
   );
 });
 
@@ -155,4 +160,129 @@ test('retry controller caps attempts and rejects a repeated unsuccessful fix', (
     { signature: 'fix-B' },
     { signature: 'fix-C' },
   ], 'fix-D').allowed, false);
+});
+
+test('platform safety guard blocks destructive SQL, Supabase Auth, client secret leaks, unsafe XSS, and RULES.md tampering', () => {
+  assert.notEqual(
+    platformSafetyViolations(
+      ['supabase/migrations/20261028000000_bad.sql'],
+      ['DROP TABLE public.products;']
+    ).length,
+    0,
+    'destructive DROP TABLE in migrations must be blocked'
+  );
+  assert.notEqual(
+    platformSafetyViolations(
+      ['supabase/migrations/20261028000000_bad_rls.sql'],
+      ['ALTER TABLE public.orders DISABLE ROW LEVEL SECURITY;']
+    ).length,
+    0,
+    'disabling RLS in migrations must be blocked'
+  );
+  assert.notEqual(
+    platformSafetyViolations(
+      ['src/components/login.tsx'],
+      ['"use client";\nsupabase.auth.signInWithPassword({ email, password });']
+    ).length,
+    0,
+    'Supabase Auth usage must be blocked under Clerk-only policy'
+  );
+  assert.notEqual(
+    platformSafetyViolations(
+      ['src/components/bad-client.tsx'],
+      ['"use client";\nconst key = process.env.CLERK_SECRET_KEY;']
+    ).length,
+    0,
+    'client reference to server secret must be blocked'
+  );
+  assert.notEqual(
+    platformSafetyViolations(
+      ['src/components/xss.tsx'],
+      ['export const X = () => <div dangerouslySetInnerHTML={{ __html: raw }} />;']
+    ).length,
+    0,
+    'dangerouslySetInnerHTML must be blocked'
+  );
+  assert.notEqual(
+    platformSafetyViolations(['.env.production'], ['KEY=val']).length,
+    0,
+    'tracked .env files must be blocked'
+  );
+  assert.notEqual(
+    platformSafetyViolations(['RULES.md'], ['# Weakened rules without owner']).length,
+    0,
+    'RULES.md tampering must be blocked'
+  );
+  const blockedReview = mergeInput();
+  blockedReview.pr.reviews = [{ state: 'CHANGES_REQUESTED' }];
+  assert.equal(canMergeDev(blockedReview).ok, false);
+});
+
+test('latest review per reviewer decides merge: a bot change request blocks, a later approval clears it', () => {
+  const bot = { login: 'fynnestlady-engineering-bot[bot]' };
+  const blocked = latestReviewStates([
+    { user: bot, state: 'APPROVED', submitted_at: '2026-10-27T10:00:00Z' },
+    { user: bot, state: 'CHANGES_REQUESTED', submitted_at: '2026-10-27T11:00:00Z' },
+    { user: bot, state: 'COMMENTED', submitted_at: '2026-10-27T12:00:00Z' },
+  ]);
+  assert.deepEqual(blocked, [{ login: bot.login, state: 'CHANGES_REQUESTED' }]);
+  const blockedMerge = mergeInput();
+  blockedMerge.pr.reviews = blocked;
+  assert.equal(canMergeDev(blockedMerge).ok, false);
+
+  const cleared = latestReviewStates([
+    { user: bot, state: 'CHANGES_REQUESTED', submitted_at: '2026-10-27T11:00:00Z' },
+    { user: bot, state: 'APPROVED', submitted_at: '2026-10-27T13:00:00Z' },
+  ]);
+  const clearedMerge = mergeInput();
+  clearedMerge.pr.reviews = cleared;
+  assert.equal(canMergeDev(clearedMerge).ok, true);
+});
+
+test('canMergeOldPr safely allows merge only if it does not harm current application status', () => {
+  const validPr = {
+    number: 7,
+    base: { ref: 'dev' },
+    head: { sha: HEAD },
+    draft: false,
+    state: 'open',
+    mergeable: true,
+    mergeable_state: 'clean',
+  };
+
+  // Safe clean PR
+  const safeResult = canMergeOldPr({
+    pr: validPr,
+    files: [{ filename: 'docs/guide.md', status: 'modified' }],
+    fileContents: ['Safe documentation update'],
+  });
+  assert.equal(safeResult.ok, true);
+
+  // Blocked if PR has merge conflicts with current dev
+  const conflictPr = { ...validPr, mergeable: false, mergeable_state: 'dirty' };
+  assert.equal(canMergeOldPr({ pr: conflictPr }).ok, false);
+
+  // Blocked if PR deletes critical application files (e.g. src/app/page.tsx or package.json)
+  const deletingPr = canMergeOldPr({
+    pr: validPr,
+    files: [{ filename: 'src/app/page.tsx', status: 'removed' }],
+  });
+  assert.equal(deletingPr.ok, false);
+  assert.match(deletingPr.reasons.join(' '), /deletes critical application files/);
+
+  // Blocked if PR introduces platform safety violations (e.g. destructive SQL or Supabase Auth)
+  const unsafePr = canMergeOldPr({
+    pr: validPr,
+    files: [{ filename: 'supabase/migrations/bad.sql', status: 'added' }],
+    fileContents: ['DROP TABLE public.products;'],
+  });
+  assert.equal(unsafePr.ok, false);
+  assert.match(unsafePr.reasons.join(' '), /Destructive SQL/);
+
+  // Blocked if PR has standing CHANGES_REQUESTED review
+  const requestedChangesPr = {
+    ...validPr,
+    reviews: [{ state: 'CHANGES_REQUESTED' }],
+  };
+  assert.equal(canMergeOldPr({ pr: requestedChangesPr }).ok, false);
 });

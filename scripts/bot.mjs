@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { architectureViolations, branchForIssue, canMergeDev, nextRetry, requiredReviews, validateEvidence } from './bot-core.mjs';
+import { architectureViolations, branchForIssue, canMergeDev, canMergeOldPr, latestReviewStates, nextRetry, platformSafetyViolations, requiredReviews, validateEvidence } from './bot-core.mjs';
 
 const command = process.argv[2];
 const repository = process.env.GITHUB_REPOSITORY || 'appiah233/fynnestlady';
@@ -142,6 +142,7 @@ async function api(path, { method = 'GET', body, headers = {} } = {}) {
   if (!response.ok) throw new Error(`GitHub API ${method} ${path}: ${response.status} ${String(data.message || 'request failed')}`);
   return data;
 }
+
 /**
  * Fetches branch metadata from GitHub.
  * @param {string} name - Branch name.
@@ -317,6 +318,11 @@ async function mergeDev(e) {
   const number = prNumber(e);
   assert(Number.isSafeInteger(number) && number > 0, 'PR number is required');
   let pr = await api(`pulls/${number}`);
+  if (pr.merged || pr.state === 'closed') {
+    process.stdout.write(`PR #${number} is already closed; no merge action is needed\n`);
+    await output('merged_pr', number);
+    return;
+  }
   for (let i = 0; i < 6 && pr.mergeable === null; i++) {
     await new Promise(r => setTimeout(r, 3000));
     pr = await api(`pulls/${number}`);
@@ -327,14 +333,124 @@ async function mergeDev(e) {
   const files = await api(`pulls/${number}/files?per_page=100`);
   const roles = requiredReviews(files.map(f => f.filename));
   const checks = await checksFor(pr.head.sha);
+  const rawReviews = await api(`pulls/${number}/reviews?per_page=100`);
+  const botLogin = `${process.env.FYNNESTLADY_APP_SLUG || 'fynnestlady-engineering-bot'}[bot]`;
+  const approvedHead = rawReviews.some(review => review.user?.login === botLogin && review.commit_id === pr.head.sha && review.state === 'APPROVED');
+  if (!approvedHead) {
+    process.stdout.write(`Merge deferred for PR #${number}: waiting for the Engineering Bot to approve current head ${pr.head.sha}\n`);
+    await output('merge_deferred', 'awaiting-bot-approval');
+    return;
+  }
+  // A standing "changes requested" review (including the bot's own) must block the merge.
+  pr.reviews = latestReviewStates(rawReviews);
   const verdict = canMergeDev({ pr, checks, evidence, requiredReviews: roles, killSwitch: !enabled });
   assert(verdict.ok, `Merge blocked: ${verdict.reasons.join('; ')}`);
   assert(pr.mergeable === true, 'GitHub has not established mergeability');
   await api(`pulls/${number}/merge`, { method: 'PUT', body: { merge_method: 'squash', sha: pr.head.sha, commit_title: `${pr.title} (#${number})` } });
   const merged = await api(`pulls/${number}`);
   assert(merged.merged === true, 'Merge API did not confirm merged state');
+  await closeIssueAfterMerge(issue.number, number);
   await api(`git/refs/heads/${pr.head.ref}`, { method: 'DELETE' }).catch(() => {});
   await output('merged_pr', number);
+}
+
+/**
+ * Closes the exact issue validated by the trusted evidence manifest after its PR merges.
+ * @param {number} issueNumber - Linked issue number from the validated evidence manifest.
+ * @param {number} pullRequestNumber - Successfully merged pull request number.
+ */
+async function closeIssueAfterMerge(issueNumber, pullRequestNumber) {
+  assert(Number.isSafeInteger(issueNumber) && issueNumber > 0, 'A valid linked issue is required to close work');
+  const issue = await api(`issues/${issueNumber}`);
+  assert(!issue.pull_request, 'Linked item is a pull request, not an issue');
+  if (issue.state === 'closed') return;
+  await api(`issues/${issueNumber}`, {
+    method: 'PATCH',
+    body: { state: 'closed', state_reason: 'completed' },
+  });
+  await api(`issues/${issueNumber}/comments`, {
+    method: 'POST',
+    body: { body: `Closed as completed after the Fynnestlady Engineering Bot verified and merged PR #${pullRequestNumber}.` },
+  });
+}
+
+/**
+ * Evaluates and safely merges older PRs targeting `dev` if and only if
+ * they do not harm current application status, foundation contracts, or stability.
+ * @param {object} e - GitHub event payload.
+ */
+async function mergeOldPr(e) {
+  active();
+  const prNum = prNumber(e);
+  const prsToEvaluate = [];
+  if (Number.isSafeInteger(prNum) && prNum > 0) {
+    prsToEvaluate.push(await api(`pulls/${prNum}`));
+  } else {
+    const openPulls = await api('pulls?state=open&base=dev&per_page=100');
+    prsToEvaluate.push(...openPulls);
+  }
+
+  const mergedList = [];
+  for (let pr of prsToEvaluate) {
+    const number = pr.number;
+    pr = await api(`pulls/${number}`);
+    for (let i = 0; i < 6 && (pr.mergeable === null || pr.mergeable === undefined); i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      pr = await api(`pulls/${number}`);
+    }
+    const files = await api(`pulls/${number}/files?per_page=100`);
+    const fileContents = files.map(f => f.patch || '');
+    const checks = await checksFor(pr.head.sha);
+    const rawReviews = await api(`pulls/${number}/reviews?per_page=100`);
+    pr.reviews = latestReviewStates(rawReviews);
+
+    const verdict = canMergeOldPr({
+      pr,
+      files,
+      fileContents,
+      checks,
+      killSwitch: !enabled,
+    });
+
+    if (!verdict.ok) {
+      process.stdout.write(`PR #${number} cannot be safely merged: ${verdict.reasons.join('; ')}\n`);
+      const commentBody = [
+        `## ⚠️ Fynnestlady Engineering Bot: Merge Safety Evaluation`,
+        '',
+        `Cannot safely auto-merge **PR #${number}** because it may harm current application status or violate safety rules:`,
+        '',
+        ...verdict.reasons.map(r => `- ${r}`),
+        '',
+        `*Please resolve these issues or update the branch before this PR can be merged.*`,
+      ].join('\n');
+      await api(`issues/${number}/comments`, { method: 'POST', body: { body: commentBody } });
+      continue;
+    }
+
+    // Merge safely
+    try {
+      await api(`pulls/${number}/merge`, {
+      method: 'PUT',
+      body: {
+        merge_method: 'squash',
+        sha: pr.head.sha,
+        commit_title: `${pr.title} (#${number})`,
+        commit_message: `Safely merged by Fynnestlady Engineering Bot after verifying no harm to current application status.`,
+      },
+    });
+    const merged = await api(`pulls/${number}`);
+    if (merged.merged) {
+      process.stdout.write(`PR #${number} successfully merged into dev\n`);
+      const successComment = `Merged by **Fynnestlady Engineering Bot** after verifying that candidate changes do not harm current application status, retain all foundation contracts, and pass platform safety.`;
+      await api(`issues/${number}/comments`, { method: 'POST', body: { body: successComment } });
+      await api(`git/refs/heads/${pr.head.ref}`, { method: 'DELETE' }).catch(() => {});
+      mergedList.push(number);
+    }
+    } catch (err) {
+      process.stdout.write(`Failed to merge PR #${number}: ${err.message}\n`);
+    }
+  }
+  await output('merged_prs', mergedList.join(','));
 }
 /**
  * Validates candidate files against the architecture policy.
@@ -342,7 +458,7 @@ async function mergeDev(e) {
 async function checkPolicy() {
   const paths = fileList();
   const texts = await Promise.all(paths.map(async p => existsSync(join(targetDir, p)) ? readFile(join(targetDir, p), 'utf8').catch(() => '') : ''));
-  const violations = architectureViolations(paths, texts);
+  const violations = platformSafetyViolations(paths, texts);
   assert(violations.length === 0, `Architecture policy violations:\n${violations.join('\n')}`);
   process.stdout.write(`Architecture policy passed for ${paths.length} changed files\n`);
 }
@@ -371,6 +487,7 @@ async function database() {
   if (paths.some(p => /(?:^|\/)(?:supabase|migrations)(?:\/|\b)|\.sql$/i.test(p))) {
     assert(existsSync(join(targetDir, 'supabase/config.toml')), 'Database change requires Supabase development configuration');
     assert(existsSync(join(targetDir, 'tests/database.test.mjs')), 'Database change requires executable database/RLS tests');
+    assert(process.env.DATABASE_TEST_URL && process.env.FYNNESTLADY_DATABASE_TEST_DISPOSABLE === '1', 'Database gate requires an explicitly disposable PostgreSQL test database');
     run('node', ['--test', 'tests/database.test.mjs'], { cwd: targetDir });
   }
   process.stdout.write('Database gate passed or not applicable\n');
@@ -430,8 +547,17 @@ async function remediate(e) {
 async function devHealth() {
   active();
   const dev = await branch('dev');
-  const checks = await checksFor(dev.commit.sha);
-  assert(checks.governance === 'success' && checks.scan === 'success', 'dev health failed: required checks incomplete or failing');
+  const required = ['governance', 'scan'];
+  const deadline = Date.now() + 15 * 60 * 1000;
+  let checks;
+  while (Date.now() < deadline) {
+    checks = await checksFor(dev.commit.sha);
+    const failed = required.find(name => checks[name] && !['success', 'queued', 'in_progress', 'requested', 'pending'].includes(checks[name]));
+    assert(!failed, `dev health failed: required check ${failed} concluded ${checks[failed]}`);
+    if (required.every(name => checks[name] === 'success')) break;
+    await new Promise(resolve => setTimeout(resolve, 15_000));
+  }
+  assert(required.every(name => checks?.[name] === 'success'), 'dev health timed out waiting for governance and scan checks');
   await output('dev_sha', dev.commit.sha);
 }
 /**
@@ -461,7 +587,26 @@ async function productionGate() { production(); await evidenceGate(); await data
  * Runs a post-deployment HTTPS health check against `BOT_DEPLOYMENT_URL`.
  */
 async function smoke() {
-  const url = process.env.BOT_DEPLOYMENT_URL;
+  const deploymentId = process.env.BOT_DEPLOYMENT_ID;
+  let url = process.env.BOT_DEPLOYMENT_URL;
+  const contextPath = process.env.BOT_DEPLOYMENT_CONTEXT_PATH;
+  let context = contextPath && existsSync(contextPath) ? JSON.parse(await readFile(contextPath, 'utf8')) : {};
+  if (deploymentId && (!context.sha || !context.environment || !url)) {
+    const deployment = await api(`deployments/${encodeURIComponent(deploymentId)}`);
+    const statuses = await api(`deployments/${encodeURIComponent(deploymentId)}/statuses?per_page=1`);
+    context = {
+      id: deployment.id,
+      sha: deployment.sha,
+      environment: deployment.environment,
+      url: url || statuses[0]?.environment_url || statuses[0]?.target_url || '',
+    };
+    url = context.url;
+    if (contextPath) {
+      await mkdir(resolve(contextPath, '..'), { recursive: true });
+      await writeFile(contextPath, JSON.stringify(context, null, 2));
+    }
+  }
+  assert(context.environment === 'Production', 'Smoke check only supports Production deployments');
   assert(url && /^https:\/\//.test(url), 'Verified HTTPS deployment URL required');
   const response = await fetch(new URL('/api/health', url), { redirect: 'error', signal: AbortSignal.timeout(10000) });
   assert(response.ok, `Deployment health failed: HTTP ${response.status}`);
@@ -472,7 +617,116 @@ async function smoke() {
  */
 async function rollback() {
   production();
-  throw new Error('Automatic rollback requires a verified previous deployment ID and a no-migration impact decision');
+  const runId = Number(process.env.BOT_FAILED_RUN_ID);
+  let context = {};
+  let failedRun;
+  let result = 'BLOCKED';
+  let reason = '';
+  let previousUrl = '';
+
+  try {
+    const contextPath = process.env.BOT_DEPLOYMENT_CONTEXT_PATH;
+    if (contextPath && existsSync(contextPath)) context = JSON.parse(await readFile(contextPath, 'utf8'));
+    context.id ||= process.env.BOT_DEPLOYMENT_ID || '';
+    if (!context.id && Number.isSafeInteger(runId) && runId > 0) {
+      failedRun = await api(`actions/runs/${runId}`);
+      context.sha ||= failedRun.head_sha;
+      context.id = `smoke-run-${runId}`;
+    }
+    if (context.id && !context.id.startsWith('smoke-run-')) {
+      const deployment = await api(`deployments/${encodeURIComponent(context.id)}`);
+      const statuses = await api(`deployments/${encodeURIComponent(context.id)}/statuses?per_page=1`);
+      context.sha ||= deployment.sha;
+      context.environment ||= deployment.environment;
+      context.url ||= statuses[0]?.environment_url || statuses[0]?.target_url || '';
+    }
+    if (!failedRun && Number.isSafeInteger(runId) && runId > 0) failedRun = await api(`actions/runs/${runId}`);
+    if (failedRun) {
+      assert(failedRun.name === 'Post deployment smoke', 'Rollback trigger is not the production smoke workflow');
+      assert(failedRun.conclusion === 'failure', 'Rollback trigger did not fail');
+      context.sha ||= failedRun.head_sha;
+    }
+    assert(context.environment === 'Production', 'Failed deployment is not in the Production environment');
+    assert(/^[0-9a-f]{40}$/i.test(String(context.sha || '')), 'Failed deployment commit SHA is missing or invalid');
+    assert(process.env.VERCEL_TOKEN, 'VERCEL_TOKEN secret is required for automatic production rollback');
+    assert(/^team_[A-Za-z0-9]+$/.test(process.env.VERCEL_ORG_ID || ''), 'VERCEL_ORG_ID repository variable must contain the Vercel team ID');
+    assert(/^prj_[A-Za-z0-9]+$/.test(process.env.VERCEL_PROJECT_ID || ''), 'VERCEL_PROJECT_ID repository variable must contain the Vercel project ID');
+    const productionUrl = new URL(process.env.VERCEL_PRODUCTION_URL || '');
+    assert(productionUrl.protocol === 'https:' && productionUrl.pathname === '/', 'VERCEL_PRODUCTION_URL must be an HTTPS origin');
+
+    const params = new URLSearchParams({ projectId: process.env.VERCEL_PROJECT_ID, target: 'production', limit: '20', teamId: process.env.VERCEL_ORG_ID });
+    const vercelResponse = await fetch(`https://api.vercel.com/v6/deployments?${params}`, {
+      headers: { Authorization: `Bearer ${process.env.VERCEL_TOKEN}` },
+      signal: AbortSignal.timeout(20000),
+    });
+    assert(vercelResponse.ok, `Vercel deployment lookup failed: HTTP ${vercelResponse.status}`);
+    const deployments = (await vercelResponse.json()).deployments || [];
+    const readyProduction = deployments
+      .filter(d => d.target === 'production' && d.readyState === 'READY' && d.url)
+      .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+    const activeIndex = readyProduction.findIndex(d => String(d.meta?.githubCommitSha || '').toLowerCase() === String(context.sha).toLowerCase());
+    assert(activeIndex === 0, 'Failed deployment is not the current Vercel production deployment; skipped rollback to protect a newer release');
+    const previous = readyProduction[activeIndex + 1];
+    assert(previous?.url, 'No earlier ready production deployment is available for rollback');
+    const previousSha = String(previous.meta?.githubCommitSha || '');
+    assert(/^[0-9a-f]{40}$/i.test(previousSha), 'Previous deployment commit SHA is unavailable; cannot verify rollback compatibility');
+    const comparison = await api(`compare/${previousSha}...${context.sha}`);
+    const migrations = (comparison.files || []).map(file => file.filename).filter(path => /^supabase\/migrations\//i.test(path));
+    assert(migrations.length === 0, `Database migrations changed after the previous production deployment (${migrations.join(', ')}); human data-compatibility review is required`);
+    previousUrl = /^https:\/\//.test(previous.url) ? previous.url : `https://${previous.url}`;
+
+    await mkdir('.vercel', { recursive: true });
+    await writeFile('.vercel/project.json', JSON.stringify({ orgId: process.env.VERCEL_ORG_ID, projectId: process.env.VERCEL_PROJECT_ID }));
+    run('npx', ['--yes', 'vercel@48.10.0', 'rollback', previousUrl, '--token', process.env.VERCEL_TOKEN, '--timeout', '120s']);
+    run('npx', ['--yes', 'vercel@48.10.0', 'rollback', 'status', '--token', process.env.VERCEL_TOKEN, '--timeout', '120s']);
+
+    const health = await fetch(new URL('/api/health', productionUrl), { redirect: 'error', signal: AbortSignal.timeout(15000) });
+    assert(health.ok, `Post-rollback production health failed: HTTP ${health.status}`);
+    result = 'ROLLED_BACK_AND_HEALTHY';
+    reason = `Production smoke failed for deployment ${context.id}; Vercel rolled traffic back to the previous production deployment and the canonical health endpoint returned HTTP ${health.status}.`;
+  } catch (error) {
+    const raw = String(error?.message || error);
+    reason = raw.replaceAll(process.env.VERCEL_TOKEN || '\0', '[REDACTED]').slice(0, 1200);
+  }
+
+  const runUrl = failedRun?.html_url || (Number.isSafeInteger(runId) && runId > 0 ? `https://github.com/${repository}/actions/runs/${runId}` : 'manual workflow dispatch');
+  const identity = context.id || process.env.BOT_DEPLOYMENT_ID || `smoke-run-${runId || 'unknown'}`;
+  const issueTitle = `Production rollback incident: ${identity}`;
+  const body = [
+    `## Production rollback ${result === 'ROLLED_BACK_AND_HEALTHY' ? 'completed' : 'blocked or failed'}`,
+    '',
+    `**Reason:** ${reason || 'No recovery result was recorded.'}`,
+    `**Deployment:** ${identity}`,
+    `**Commit:** ${context.sha || 'unknown'}`,
+    `**Failed smoke run:** ${runUrl}`,
+    previousUrl ? `**Restored deployment:** ${previousUrl}` : '',
+    '',
+    'The bot did not revert database, payment, order, or inventory state.',
+  ].filter(Boolean).join('\n');
+  const issues = await api('issues?state=all&per_page=100');
+  let incident = issues.find(item => !item.pull_request && item.title === issueTitle);
+  if (!incident) {
+    incident = await api('issues', { method: 'POST', body: {
+      title: issueTitle,
+      body: `Automated incident record for failed production smoke run ${runUrl}. The bot will record the rollback decision and health verification here.`,
+      labels: ['bug', 'bot-owned', 'subsystem:bot-control-plane'],
+    } });
+  }
+  await api(`issues/${incident.number}/comments`, { method: 'POST', body: { body } });
+
+  if (/^[0-9a-f]{40}$/i.test(String(context.sha || ''))) {
+    const releases = await api('pulls?state=closed&base=main&per_page=100');
+    const releasePr = releases.find(pr => pr.merged_at && (
+      pr.merge_commit_sha?.toLowerCase() === context.sha.toLowerCase() ||
+      pr.head?.sha?.toLowerCase() === context.sha.toLowerCase() ||
+      String(pr.body || '').toLowerCase().includes(context.sha.toLowerCase())
+    ));
+    if (releasePr) await api(`issues/${releasePr.number}/comments`, { method: 'POST', body: { body } });
+  }
+
+  await output('rollback_result', result);
+  await output('incident_issue', incident.number);
+  if (result !== 'ROLLED_BACK_AND_HEALTHY') throw new Error(`Automatic rollback did not complete: ${reason}`);
 }
 /**
  * Inspects open Dependabot PRs targeting `dev`.
@@ -629,7 +883,7 @@ async function roleReview() {
   const deterministicFindings = [];
   if (role === 'ArchitectAgent') {
     const texts = await Promise.all(paths.map(async p => existsSync(join(targetDir, p)) ? readFile(join(targetDir, p), 'utf8').catch(() => '') : ''));
-    deterministicFindings.push(...architectureViolations(paths, texts));
+    deterministicFindings.push(...platformSafetyViolations(paths, texts));
   } else if (role === 'SecurityAgent') {
     try { run('node', [join(controlDir, 'scan-secrets.mjs')], { cwd: targetDir }); }
     catch (err) { deterministicFindings.push(`Secret scan failed: ${err.message}`); }
@@ -682,7 +936,7 @@ async function roleReview() {
   await writeFile(outFile, `${JSON.stringify(verdict, null, 2)}\n`);
 }
 
-const handlers = { intake, branch: createBranch, 'task-context': taskContext, 'open-pr': openPr, 'merge-dev': mergeDev, policy: checkPolicy, quality, security, database, accessibility, evidence: evidenceGate, remediate, 'dev-health': devHealth, release, 'production-gate': productionGate, 'post-deployment-smoke': smoke, rollback, dependency, 'publish-patch': publishPatch, 'role-review': roleReview, 'free-implement': freeImplement, 'free-remediate': freeRemediate };
+const handlers = { intake, branch: createBranch, 'task-context': taskContext, 'open-pr': openPr, 'merge-dev': mergeDev, policy: checkPolicy, quality, security, database, accessibility, evidence: evidenceGate, remediate, 'dev-health': devHealth, release, 'production-gate': productionGate, 'post-deployment-smoke': smoke, rollback, dependency, 'publish-patch': publishPatch, 'role-review': roleReview, 'free-implement': freeImplement, 'free-remediate': freeRemediate, 'merge-old-pr': mergeOldPr };
 try {
   assert(command in handlers, `Unknown bot command: ${command}`);
   await handlers[command](await event());

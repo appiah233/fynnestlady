@@ -26,12 +26,30 @@ jobs:
         with:
           ref: main
           persist-credentials: false
+      - name: Capture deployment context for incident recovery
+        env:
+          DEPLOYMENT_ID: ${{ github.event.deployment.id || inputs.deployment_id }}
+          DEPLOYMENT_SHA: ${{ github.event.deployment.sha }}
+          DEPLOYMENT_ENVIRONMENT: ${{ github.event.deployment.environment }}
+          DEPLOYMENT_URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+        run: |
+          mkdir -p deployment-context
+          node --input-type=module -e 'import { writeFileSync } from "node:fs"; writeFileSync("deployment-context/context.json", JSON.stringify({ id: process.env.DEPLOYMENT_ID, sha: process.env.DEPLOYMENT_SHA, environment: process.env.DEPLOYMENT_ENVIRONMENT, url: process.env.DEPLOYMENT_URL }, null, 2));'
       - name: Run read-only production smoke
         env:
           BOT_DEPLOYMENT_ID: ${{ github.event.deployment.id || inputs.deployment_id }}
           BOT_DEPLOYMENT_URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+          BOT_DEPLOYMENT_CONTEXT_PATH: ${{ github.workspace }}/deployment-context/context.json
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/bot.mjs post-deployment-smoke
+      - name: Preserve deployment context for rollback workflow
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: deployment-context
+          path: deployment-context/context.json
+          if-no-files-found: error
+          retention-days: 30
       - name: Incident signal
         if: failure()
         run: echo "::error::Production smoke failed. Inspect deployment and rollback eligibility." >> "$GITHUB_STEP_SUMMARY"

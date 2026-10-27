@@ -22,7 +22,7 @@ stack:
   styling: Tailwind CSS
   components: shadcn/ui
   database: Supabase PostgreSQL
-  authentication: Supabase Auth
+  authentication: Clerk
   object_storage: Supabase Storage
   hosting: Vercel
   payments: Paystack

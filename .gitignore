@@ -1,10 +1,12 @@
 # Dependencies and builds
 node_modules/
+.npm-cache/
 .next/
 out/
 coverage/
 playwright-report/
 test-results/
+*.tsbuildinfo
 
 # Local environment and secrets
 .env
@@ -27,3 +29,4 @@ gha-creds-*.json
 # Prisma/local data
 *.db
 *.db-journal
+*.tsbuildinfo
