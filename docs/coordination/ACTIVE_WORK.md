@@ -1,5 +1,19 @@
 # Active Work
 
+## 2026-10-26T17:04:34Z FynnestladyEngineeringBot
+
+Task ID: SPRINT-1-INTEGRATION
+Branch: feature/fynnestlady-visual-storefront (shared integration workspace; specialist branches #8-#12 already exist)
+Role: Orchestrator; DesignAgent, DatabaseAgent, SecurityAgent, StorefrontAgent, and independent TestingAgent assigned bounded work
+Objective: Resume the owner-authorized first sprint and integrate executable design, application, Supabase, security, and testing foundations.
+Business outcome: A verifiable store foundation following the building memo, without fabricated catalogue or live payments.
+Scope: Existing unfinished work, application foundation, design primitives, database migrations, security tests, CI gates, and integration evidence.
+Non-goals: Production deployment, live Paystack, production customer data, bypassing branch protection.
+Files expected: `src/**`, `supabase/**`, `tests/**`, `docs/design/**`, `docs/architecture/**`, `docs/testing/**`, `.github/workflows/database-gate.yml`, `scripts/**`.
+Dependencies: Design specifications before storefront UI; database contracts before commerce/auth; independent TestingAgent verdict before dev merge.
+Conflicts checked: Existing dirty worktree preserved; specialist branches and worktrees inspected. Shared files serialized. Git metadata is read-only in this workspace and GitHub CLI credentials are invalid.
+Status: In progress; local integration and verification. Remote PR and protected dev merge pending authenticated bot operation.
+
 ## 2026-10-26T13:00:00Z DesignAgent
 
 Task ID: SPRINT1-DESIGN-001
@@ -12,6 +26,20 @@ Non-goals: Catalogue content, backend contracts, routing, and checkout logic.
 Files expected: src/app/globals.css, src/components/ui/**, public/brand/**, docs/design/**.
 Dependencies: ArchitectAgent imports globals.css and installs the application/toolchain; StorefrontAgent consumes the components; TestingAgent independently verifies them.
 Conflicts checked: ArchitectAgent owns package/layout/page and explicitly handed globals.css to DesignAgent. Other streams own schema and security. Source logo was untracked in the original worktree.
+Status: Complete; visual system and primitives integrated.
+
+## 2026-10-26T12:19:47Z Codex
+
+Task ID: BOT-CONTROL-001
+Branch: feature/fynnestlady-engineering-bot
+Role: Bot control-plane coordinator with ArchitectAgent, ProductAgent, DatabaseAgent, SecurityAgent, DesignAgent, and independent TestingAgent reviews
+Objective: Implement and validate the Fynnestlady Engineering Bot control plane on a branch from dev.
+Business outcome: Automate issue-to-dev engineering work through a dedicated GitHub App while preserving protected-branch gates.
+Scope: GitHub App manifest, Gemini CLI workflows and prompts, deterministic controllers and tests, policy reconciliation, and non-production validation.
+Non-goals: Production deployment, live Paystack, production database operations, and weakening branch protection.
+Files expected: .github/**, scripts/**, tests/**, docs/**.
+Dependencies: GitHub App installation, Gemini API secret (GEMINI_API_KEY), Vercel/Supabase development access, required branch review policy.
+Conflicts checked: Existing dev/main at 3565162; only pre-existing untracked logo.jpeg. Existing owner-only merge governance conflicts with the new bot instruction and requires explicit reconciliation.
 Status: In progress.
 
 ## 2026-10-21T16:22:55Z Codex

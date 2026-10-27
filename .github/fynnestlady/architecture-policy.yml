@@ -1,0 +1,56 @@
+# Contract for the engineering bot's architecture gate. Legacy proposals in docs
+# are historical context; new code and accepted ADRs must follow this policy.
+version: 1
+status: owner-directed
+building_memo: docs/governance/BUILDING_MEMO.md
+branches:
+  production: main
+  integration: dev
+  normal_base: dev
+  allowed_work_prefixes:
+    - feature/
+    - fix/
+    - security/
+    - chore/
+  main_direct_push: false
+  dev_direct_push: false
+  force_push: false
+  delete_permanent_branches: false
+stack:
+  framework: Next.js 15
+  language: TypeScript
+  styling: Tailwind CSS
+  components: shadcn/ui
+  database: Supabase PostgreSQL
+  authentication: Clerk
+  object_storage: Supabase Storage
+  hosting: Vercel
+  payments: Paystack
+  currency: GHS
+  source_control: GitHub
+  browser_testing: Playwright
+  accessibility_target: WCAG 2.2 AA
+forbidden_new_dependencies_or_infrastructure:
+  - EC2
+  - RDS
+  - S3
+  - AWS IAM
+  - NGINX application hosting
+  - Prisma
+  - Auth.js
+  - alternative hosting, authentication, database, storage, or payment provider
+exceptions:
+  requires_new_owner_accepted_adr: true
+  architecture_gate_must_block_until_accepted: true
+commerce_invariants:
+  server_authoritative_prices_and_totals: true
+  independent_payment_verification: true
+  idempotent_authenticated_webhooks: true
+  concurrency_safe_inventory: true
+  immutable_order_snapshots: true
+release_safety:
+  first_control_plane_validation_main_merge: false
+  first_control_plane_validation_production_deploy: false
+  no_prod_secrets_in_codex: true
+  no_fork_code_with_secrets: true
+  no_branch_protection_bypass: true

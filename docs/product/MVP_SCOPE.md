@@ -6,7 +6,7 @@
 - Customer: registration, sign-in, password reset, profile, addresses, order history, and order status.
 - Commerce: genuine variants, GHS minor-unit pricing, inventory, discounts, server totals, Paystack payment, orders, shipment state, and transactional communication.
 - Administration: secure RBAC, products, variants, media, taxonomy, concerns, ingredients/content, pricing, inventory, publishing, orders, fulfilment, discounts, audit history, and basic reporting.
-- Platform: PostgreSQL, S3 media, observability, backups, CI gates, accessibility, security controls, and documented deployment/rollback.
+- Platform: Supabase PostgreSQL/Auth/Storage, Vercel, observability, backups, CI gates, accessibility, security controls, and documented deployment/rollback.
 
 ## Explicit Non-goals
 

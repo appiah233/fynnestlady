@@ -1,13 +1,48 @@
 import type { ReactNode } from "react";
 
-export function Badge({ children }: { children: ReactNode }) {
-  return <span className="ui-badge">{children}</span>;
+export function Badge({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <span className={`ui-badge ${className}`.trim()}>{children}</span>;
 }
 
-export function Alert({ children, tone = "info" }: { children: ReactNode; tone?: "info" | "success" | "error" }) {
-  return <div className="ui-alert" data-tone={tone} role={tone === "error" ? "alert" : "status"}>{children}</div>;
+export function Alert({
+  children,
+  tone = "info",
+  className = "",
+}: {
+  children: ReactNode;
+  tone?: "info" | "success" | "error";
+  className?: string;
+}) {
+  return (
+    <div
+      className={`ui-alert ${className}`.trim()}
+      data-tone={tone}
+      role={tone === "error" ? "alert" : "status"}
+    >
+      {children}
+    </div>
+  );
 }
 
-export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
-  return <div className="ui-empty"><h2 className="font-display">{title}</h2>{children}</div>;
+export function EmptyState({
+  title,
+  children,
+  className = "",
+}: {
+  title: string;
+  children?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`ui-empty ${className}`.trim()}>
+      <h2 className="font-display text-subheading mb-2">{title}</h2>
+      {children}
+    </div>
+  );
 }

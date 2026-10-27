@@ -1,0 +1,23 @@
+{
+  "name": "Fynnestlady Engineering Bot",
+  "url": "https://github.com/appiah233/fynnestlady",
+  "description": "Repository-scoped engineering automation for Fynnestlady.",
+  "public": false,
+  "hook_attributes": {
+    "url": "https://github.com/appiah233/fynnestlady",
+    "active": false
+  },
+  "default_events": [],
+  "default_permissions": {
+    "metadata": "read",
+    "contents": "write",
+    "workflows": "write",
+    "issues": "write",
+    "pull_requests": "write",
+    "actions": "write",
+    "checks": "read",
+    "statuses": "read",
+    "deployments": "read"
+  },
+  "request_oauth_on_install": false
+}

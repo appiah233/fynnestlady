@@ -1,20 +1,20 @@
 # ADR-006: Authentication Strategy
 
-Status: **Proposed**
+Status: **Accepted (Owner-Directed)**
 
 ## Context
-Customers and administrators require secure account access and recovery.
+Customers and administrators require secure account access, sign-in, registration, session management, and recovery on Next.js 15 App Router.
 ## Problem
-Choose maintained identity/session primitives without custom security mistakes.
+Choose maintained identity/session primitives without custom security mistakes while keeping database data in Supabase PostgreSQL.
 ## Options
-Auth.js; managed identity provider; custom implementation.
+Clerk (`@clerk/nextjs`); Supabase Auth; Auth.js; custom implementation.
 ## Decision
-Evaluate Auth.js in Milestone 1; do not accept until session, adapter, reset, admin MFA, and maintenance posture are reviewed.
+Use **Clerk (`@clerk/nextjs`)** as the authentication and identity provider for Fynnestlady (`ClerkProvider`, `clerkMiddleware`, `/sign-in`, and `/sign-up` routes). `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is used for client/server session initialization, while `CLERK_SECRET_KEY` remains strictly server-only.
 ## Consequences
-Defers lock-in while preserving explicit security criteria.
+Provides first-class Next.js 15 App Router authentication, session handling, and account recovery while Supabase PostgreSQL and Storage remain the authoritative data and media layer.
 ## Risks
-Foundation cannot yet specify final schema/session behavior.
+Requires environment variables (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY`) in preview/production; unconfigured local/CI builds must degrade gracefully without leaking secrets.
 ## Alternatives
-Managed identity reduces credential handling but adds cost/vendor dependency; custom auth has high risk.
+Auth.js remains unapproved; custom authentication is rejected due to security risk.
 ## Revisit conditions
-Completed security spike and owner decision.
+Owner architectural direction change.

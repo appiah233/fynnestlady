@@ -1,45 +1,47 @@
 import type { Metadata } from "next";
-import Image from "next/image";
-import Link from "next/link";
+import { Suspense } from "react";
 import "./globals.css";
+import { AuthProvider } from "@/components/auth-provider";
+import { CartProvider } from "@/components/cart-provider";
+import { Header } from "@/components/header";
+import { Footer } from "@/components/footer";
 
 export const metadata: Metadata = {
   title: "Fynnestlady Skincare",
   description: "Your Skin. Your Needs. Your Fynnest Glow.",
+  icons: {
+    icon: "/logo.jpeg",
+  },
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en-GH">
-      <body>
-        <a className="skip-link" href="#main-content">Skip to main content</a>
-        <header className="border-b border-[var(--border)] bg-[var(--surface)]">
-          <div className="container-page flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <Link className="inline-flex w-fit items-center gap-3 no-underline" href="/" aria-label="Fynnestlady Skincare home">
-              <Image
-                src="/brand/fynnestlady-logo.jpeg"
-                alt=""
-                width={64}
-                height={64}
-                priority
-                className="h-14 w-14 rounded-full object-cover"
-              />
-              <span className="font-display text-xl text-[var(--foreground)]">Fynnestlady</span>
-            </Link>
-            <nav aria-label="Main navigation" className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm font-semibold">
-              <Link href="/">Home</Link>
-              <Link href="/#about">Our approach</Link>
-            </nav>
-          </div>
-        </header>
-        {children}
-        <footer className="border-t border-[var(--border)] bg-[var(--surface-muted)] py-8">
-          <div className="container-page text-sm">
-            <p className="font-semibold">Fynnestlady Skincare</p>
-            <p>Your Skin. Your Needs. Your Fynnest Glow.</p>
-          </div>
-        </footer>
-      </body>
-    </html>
+    <AuthProvider>
+      <html lang="en-GH">
+        <body className="min-h-[100vh] flex flex-col">
+          <a className="skip-link" href="#main-content">
+            Skip to main content
+          </a>
+          <CartProvider>
+            <Suspense
+              fallback={
+                <div
+                  className="min-h-[85px] border-b border-[var(--border)] bg-[var(--surface)]"
+                  aria-hidden="true"
+                />
+              }
+            >
+              <Header />
+            </Suspense>
+            <main id="main-content" tabIndex={-1} className="flex-1">
+              {children}
+            </main>
+            <Footer />
+          </CartProvider>
+        </body>
+      </html>
+    </AuthProvider>
   );
 }

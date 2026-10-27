@@ -1,0 +1,219 @@
+name: Bot remediate
+on:
+  workflow_run:
+    workflows: [PR quality gate, Security gate, Accessibility gate, Database gate, Evidence gate]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR requiring repair
+        required: true
+        type: number
+      branch_name:
+        description: Bot-owned PR branch
+        required: true
+        type: string
+permissions: {}
+env:
+  FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
+  FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
+concurrency:
+  group: bot-remediate-${{ github.event.workflow_run.head_sha || inputs.pr_number }}
+  cancel-in-progress: false
+jobs:
+  claim:
+    if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_repository.full_name == github.repository)) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Require bot-owned work branch
+        shell: bash
+        env:
+          BOT_BRANCH_NAME: ${{ github.event.workflow_run.head_branch || inputs.branch_name }}
+        run: |
+          set -euo pipefail
+          [[ "$BOT_BRANCH_NAME" =~ ^(feature|fix|security|chore)/[0-9]+-[a-z0-9-]+$ ]]
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          persist-credentials: false
+      - name: Mint GitHub App token (when configured)
+        if: ${{ vars.FYNNESTLADY_USE_GITHUB_APP == 'true' }}
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        id: app
+        with:
+          app-id: ${{ secrets.FYNNESTLADY_APP_ID }}
+          private-key: ${{ secrets.FYNNESTLADY_APP_PRIVATE_KEY }}
+          permission-actions: read
+          permission-issues: write
+          permission-pull-requests: read
+      - name: Check bounded retry and failure signature
+        env:
+          BOT_PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number || inputs.pr_number }}
+          BOT_FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
+          BOT_BRANCH_NAME: ${{ github.event.workflow_run.head_branch || inputs.branch_name }}
+          GITHUB_TOKEN: ${{ steps.app.outputs.token || github.token }}
+        run: node scripts/bot.mjs remediate
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: bot-failure-${{ github.run_id }}
+          path: .bot/failure.log
+          if-no-files-found: error
+          retention-days: 30
+  diagnose:
+    needs: claim
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      models: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          persist-credentials: false
+      - name: Check out failed candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.workflow_run.head_branch || inputs.branch_name }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: bot-failure-${{ github.run_id }}
+          path: .bot
+      - name: Gemini root-cause analysis and repair (free tier when key configured)
+        id: gemini_remediate
+        if: ${{ vars.FYNNESTLADY_USE_GEMINI_API == 'true' }}
+        uses: google-github-actions/run-gemini-cli@v0
+        env:
+          BOT_FAILURE_LOG_PATH: ${{ github.workspace }}/.bot/failure.log
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          prompt: |
+            Operate only inside the ./candidate directory. Read the diagnostic failure log at .bot/failure.log and follow the instructions in .github/codex/prompts/failure-remediation.md to repair the failed gate.
+          settings: |
+            {
+              "telemetry": { "enabled": false }
+            }
+      - name: Built-in GitHub Models / deterministic zero-cost remediation
+        if: ${{ vars.FYNNESTLADY_USE_GEMINI_API != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BOT_TARGET_DIR: ${{ github.workspace }}/candidate
+          BOT_FAILURE_LOG_PATH: ${{ github.workspace }}/.bot/failure.log
+          BOT_OUTPUT_FILE: ${{ github.workspace }}/bot-remediation.txt
+        run: node scripts/bot.mjs free-remediate
+      - name: Capture corrected patch
+        shell: bash
+        env:
+          GEMINI_REMEDIATE_OUTPUT: ${{ steps.gemini_remediate.outputs.summary }}
+        run: |
+          set -euo pipefail
+          if [ -n "$GEMINI_REMEDIATE_OUTPUT" ]; then
+            printf '%s\n' "$GEMINI_REMEDIATE_OUTPUT" > bot-remediation.txt
+          elif [ ! -s bot-remediation.txt ]; then
+            echo "Gemini remediation completed" > bot-remediation.txt
+          fi
+          rm -rf candidate/.gemini
+          git -C candidate add -N .
+          git -C candidate diff --binary --no-renames > bot.patch
+          test -s bot.patch || { echo "::error::No repair patch produced"; exit 1; }
+          git -C candidate diff --check
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: bot-remediation-${{ github.run_id }}
+          path: |
+            bot.patch
+            bot-remediation.txt
+          if-no-files-found: error
+          retention-days: 14
+  validate:
+    needs: diagnose
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          persist-credentials: false
+      - name: Check out candidate as data
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.workflow_run.head_branch || inputs.branch_name }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: bot-remediation-${{ github.run_id }}
+          path: bot-artifact
+      - name: Reproduce and run adjacent gates
+        shell: bash
+        env:
+          BOT_TARGET_DIR: ${{ github.workspace }}/candidate
+        run: |
+          set -euo pipefail
+          git -C candidate apply --check "$GITHUB_WORKSPACE/bot-artifact/bot.patch"
+          git -C candidate apply "$GITHUB_WORKSPACE/bot-artifact/bot.patch"
+          node scripts/bot.mjs policy
+          node scripts/bot.mjs quality
+          node scripts/bot.mjs security
+          node scripts/bot.mjs database
+          node scripts/bot.mjs accessibility
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          persist-credentials: false
+      - name: Mint GitHub App token (when configured)
+        if: ${{ vars.FYNNESTLADY_USE_GITHUB_APP == 'true' }}
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        id: app
+        with:
+          app-id: ${{ secrets.FYNNESTLADY_APP_ID }}
+          private-key: ${{ secrets.FYNNESTLADY_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+          permission-actions: write
+      - name: Check out PR branch as data
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.workflow_run.head_branch || inputs.branch_name }}
+          path: candidate
+          token: ${{ steps.app.outputs.token || github.token }}
+          persist-credentials: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: bot-remediation-${{ github.run_id }}
+          path: bot-artifact
+      - name: Publish validated repair to PR branch
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          BOT_PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number || inputs.pr_number }}
+          BOT_FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
+          BOT_BRANCH_NAME: ${{ github.event.workflow_run.head_branch || inputs.branch_name }}
+          BOT_TARGET_DIR: ${{ github.workspace }}/candidate
+          BOT_PATCH_PATH: ${{ github.workspace }}/bot-artifact/bot.patch
+        run: |
+          set -euo pipefail
+          node scripts/bot.mjs publish-patch

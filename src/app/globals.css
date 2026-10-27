@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "tailwindcss" source("../../src");
 
 :root {
   color-scheme: light;
@@ -18,6 +18,7 @@
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.9rem;
+  --shadow-raised: 0 0.4rem 1.5rem rgb(41 34 30 / 8%);
   --container: 80rem;
   --gutter: clamp(1rem, 4vw, 3rem);
   --font-body: Arial, Helvetica, sans-serif;
@@ -81,12 +82,15 @@ a:hover { color: var(--primary); }
 .ui-button[data-variant="quiet"] { background: transparent; color: var(--foreground); }
 .ui-button[data-variant="quiet"]:hover:not(:disabled) { background: var(--surface-muted); }
 .ui-button:disabled { opacity: 0.5; }
+.ui-button:active:not(:disabled) { transform: translateY(1px); }
 .ui-button[aria-busy="true"] { cursor: progress; }
 
 .ui-field { display: grid; gap: 0.4rem; }
 .ui-field__label { font-size: 0.9rem; font-weight: 700; }
 .ui-field__input { width: 100%; min-height: 2.75rem; border: 1px solid #8d8279; border-radius: var(--radius-sm); background: var(--surface); color: var(--foreground); padding: 0.6rem 0.8rem; }
 .ui-field__input:disabled { background: var(--surface-muted); opacity: 0.65; }
+.ui-field__input:hover:not(:disabled) { border-color: var(--foreground); }
+.ui-field__input:focus-visible { border-color: var(--focus); }
 .ui-field__input[aria-invalid="true"] { border-color: var(--danger); border-width: 2px; }
 .ui-field__hint { color: var(--muted-foreground); font-size: 0.85rem; }
 .ui-field__error { color: var(--danger); font-size: 0.85rem; font-weight: 700; }
@@ -99,9 +103,242 @@ a:hover { color: var(--primary); }
 .ui-alert[data-tone="success"] { border-color: var(--success); }
 .ui-empty { border: 1px dashed var(--border); border-radius: var(--radius-md); padding: clamp(1.5rem, 5vw, 3rem); text-align: center; }
 .ui-skeleton { background: linear-gradient(90deg, #ece5de 25%, #f8f3ee 50%, #ece5de 75%); background-size: 200% 100%; border-radius: var(--radius-sm); animation: shimmer 1.5s linear infinite; }
+.ui-product-card { display: grid; grid-template-rows: auto 1fr; min-width: 0; }
+.ui-product-card__image { aspect-ratio: 4 / 5; background: var(--surface-muted); object-fit: cover; width: 100%; }
+.ui-product-card__body { display: grid; align-content: start; gap: var(--space-2); padding: var(--space-4); }
+.ui-product-card__title { font-family: var(--font-display); font-size: clamp(1.2rem, 2vw, 1.5rem); line-height: 1.2; margin: 0; }
+.ui-product-card__price { font-weight: 700; margin: 0; }
+.ui-product-card__meta { color: var(--muted-foreground); font-size: 0.875rem; margin: 0; }
+.ui-product-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.ui-dialog { border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-raised); color: var(--foreground); max-height: min(90dvh, 50rem); max-width: min(100% - 2rem, 36rem); overflow: auto; padding: var(--space-6); width: 100%; }
+.ui-dialog::backdrop { background: rgb(41 34 30 / 65%); }
+.ui-drawer { border: 0; box-shadow: var(--shadow-raised); color: var(--foreground); height: 100dvh; inset: 0 0 0 auto; margin: 0; max-height: none; max-width: min(100%, 25rem); overflow: auto; padding: var(--space-6); width: 100%; }
+.ui-drawer::backdrop { background: rgb(41 34 30 / 65%); }
+.ui-nav-list { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); list-style: none; margin: 0; padding: 0; }
+.ui-nav-link { display: inline-flex; align-items: center; min-height: 2.75rem; text-decoration: none; }
+.ui-nav-link[aria-current="page"] { color: var(--primary); font-weight: 700; text-decoration: underline; text-underline-offset: 0.35em; }
+.ui-brand-image { background: #fff; height: auto; object-fit: contain; }
 @keyframes shimmer { to { background-position: -200% 0; } }
+
+@media (min-width: 48rem) {
+  .ui-product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-6); }
+}
+@media (min-width: 64rem) {
+  .ui-product-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* ==========================================================================
+   FYNNESTLADY DESIGN SYSTEM — extended tokens
+   Warm-neutral premium skincare identity. Derived from the official logo
+   (deep berry #7c184a + warm gold #8a651c) balanced by sophisticated neutrals.
+   ========================================================================== */
+
+/* Colour tokens */
+:root {
+  --primary-hover: #5b1136;
+  --primary-soft: #f7eaf0;
+  --accent-hover: #6f5215;
+  --accent-soft: #fbf6ec;
+  --surface-panel: #ffffff;
+  --surface-raised: #fffefa;
+  --hairline: #e2d8ce;
+  --border-strong: #b9aead;
+  --ink: #29221e;
+  --ink-muted: #524841;
+  --shadow-sm: 0 1px 3px 0 rgb(41 34 30 / 0.06), 0 1px 2px 0 rgb(41 34 30 / 0.04);
+  --shadow-md: 0 4px 16px 0 rgb(41 34 30 / 0.06), 0 2px 6px 0 rgb(41 34 30 / 0.04);
+  --shadow-lg: 0 20px 48px 0 rgb(41 34 30 / 0.09);
+  --radius-xl: 1.2rem;
+  --radius-full: 100vmax;
+}
+
+/* Typography scale */
+:root {
+  --text-display: clamp(2.4rem, 6vw + 1rem, 4.5rem);
+  --text-heading: clamp(1.6rem, 3.5vw + 0.9rem, 2.5rem);
+  --text-subheading: clamp(1.3rem, 2.5vw + 0.7rem, 1.85rem);
+  --text-body: 1rem;
+  --text-body-sm: 0.9rem;
+  --text-utility: 0.85rem;
+  --text-caption: 0.8rem;
+  --leading-tight: 1.1;
+  --leading-normal: 1.55;
+  --leading-relaxed: 1.75;
+}
+
+/* Spacing scale */
+:root {
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+}
+
+@theme inline {
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-surface-panel: var(--surface-panel);
+  --color-surface-raised: var(--surface-raised);
+  --color-hairline: var(--hairline);
+  --color-border-strong: var(--border-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-full: var(--radius-full);
+  --font-size-display: var(--text-display);
+  --font-size-heading: var(--text-heading);
+  --font-size-subheading: var(--text-subheading);
+  --font-size-body: var(--text-body);
+  --font-size-body-sm: var(--text-body-sm);
+  --font-size-utility: var(--text-utility);
+  --font-size-caption: var(--text-caption);
+  --leading-tight: var(--leading-tight);
+  --leading-normal: var(--leading-normal);
+  --leading-relaxed: var(--leading-relaxed);
+  --spacing-1: var(--space-1);
+  --spacing-2: var(--space-2);
+  --spacing-3: var(--space-3);
+  --spacing-4: var(--space-4);
+  --spacing-5: var(--space-5);
+  --spacing-6: var(--space-6);
+  --spacing-8: var(--space-8);
+  --spacing-10: var(--space-10);
+  --spacing-12: var(--space-12);
+  --spacing-16: var(--space-16);
+  --spacing-20: var(--space-20);
+}
+
+/* Typography helpers */
+.font-display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  line-height: var(--leading-tight);
+}
+.text-display {
+  font-size: var(--text-display);
+  line-height: var(--leading-tight);
+}
+.text-heading {
+  font-size: var(--text-heading);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.02em;
+}
+.text-subheading {
+  font-size: var(--text-subheading);
+  line-height: var(--leading-tight);
+}
+.text-body {
+  font-size: var(--text-body);
+  line-height: var(--leading-relaxed);
+}
+.text-body-sm {
+  font-size: var(--text-body-sm);
+  line-height: var(--leading-relaxed);
+}
+.text-utility {
+  font-size: var(--text-utility);
+  line-height: 1.4;
+}
+.text-caption {
+  font-size: var(--text-caption);
+  line-height: 1.4;
+}
+
+/* Surface helpers */
+.surface-panel { background: var(--surface-panel); }
+.surface-raised { background: var(--surface-raised); }
+.surface-muted { background: var(--surface-muted); }
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.shadow-md { box-shadow: var(--shadow-md); }
+.shadow-lg { box-shadow: var(--shadow-lg); }
+
+/* Extended component base styles */
+.ui-card--panel {
+  background: var(--surface-panel);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.ui-card--raised {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.ui-card__body--loose { padding: clamp(1.25rem, 3vw, 2rem); }
+
+.ui-overflow-clip { overflow: hidden; }
+
+.ui-link {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 0.22em;
+  text-decoration-thickness: 1px;
+  font-weight: 700;
+}
+.ui-link:hover { color: var(--primary-hover); }
+
+.ui-divider {
+  border: none;
+  border-top: 1px solid var(--hairline);
+  margin: var(--space-8) 0;
+}
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+
+/* Top-layer modal dialog and drawer scroll containment (modern-web-guidance: dialog) */
+dialog:modal {
+  overscroll-behavior: contain;
+}
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+.ui-drawer {
+  background: var(--surface-panel);
+  border-inline-start: 1px solid var(--hairline);
+  padding: 0;
+  max-width: min(100%, 26rem);
+}
+.ui-drawer[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+
+/* Top-layer modal dialog and drawer scroll containment (modern-web-guidance: dialog) */
+dialog:modal {
+  overscroll-behavior: contain;
+}
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+.ui-drawer {
+  background: var(--surface-panel);
+  border-inline-start: 1px solid var(--hairline);
+  padding: 0;
+  max-width: min(100%, 26rem);
+}
+.ui-drawer[open] {
+  display: flex;
+  flex-direction: column;
 }
