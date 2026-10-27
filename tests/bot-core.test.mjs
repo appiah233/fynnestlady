@@ -62,6 +62,11 @@ test('architecture policy flags unapproved production dependencies', () => {
     0,
     'infrastructure YAML must not bypass the architecture gate',
   );
+  assert.deepEqual(
+    architectureViolations(['public/brand/logo.jpeg'], ['binary bytes containing EC2 and S3']),
+    [],
+    'binary brand assets must not be decoded as architecture text',
+  );
 });
 
 test('frontend changes require independent design and testing review', () => {
