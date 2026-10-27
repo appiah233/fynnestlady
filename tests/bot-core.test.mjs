@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import {
   architectureViolations,
   branchForIssue,
-  canMergeDev,
-  nextRetry,
+  canMergeDev,  canMergeOldPr,  latestReviewStates,  nextRetry,
   platformSafetyViolations,
   REQUIRED_CHECKS,
   requiredReviews,
@@ -217,4 +216,73 @@ test('platform safety guard blocks destructive SQL, Supabase Auth, client secret
   const blockedReview = mergeInput();
   blockedReview.pr.reviews = [{ state: 'CHANGES_REQUESTED' }];
   assert.equal(canMergeDev(blockedReview).ok, false);
+});
+
+test('latest review per reviewer decides merge: a bot change request blocks, a later approval clears it', () => {
+  const bot = { login: 'fynnestlady-engineering-bot[bot]' };
+  const blocked = latestReviewStates([
+    { user: bot, state: 'APPROVED', submitted_at: '2026-10-27T10:00:00Z' },
+    { user: bot, state: 'CHANGES_REQUESTED', submitted_at: '2026-10-27T11:00:00Z' },
+    { user: bot, state: 'COMMENTED', submitted_at: '2026-10-27T12:00:00Z' },
+  ]);
+  assert.deepEqual(blocked, [{ login: bot.login, state: 'CHANGES_REQUESTED' }]);
+  const blockedMerge = mergeInput();
+  blockedMerge.pr.reviews = blocked;
+  assert.equal(canMergeDev(blockedMerge).ok, false);
+
+  const cleared = latestReviewStates([
+    { user: bot, state: 'CHANGES_REQUESTED', submitted_at: '2026-10-27T11:00:00Z' },
+    { user: bot, state: 'APPROVED', submitted_at: '2026-10-27T13:00:00Z' },
+  ]);
+  const clearedMerge = mergeInput();
+  clearedMerge.pr.reviews = cleared;
+  assert.equal(canMergeDev(clearedMerge).ok, true);
+});
+
+test('canMergeOldPr safely allows merge only if it does not harm current application status', () => {
+  const validPr = {
+    number: 7,
+    base: { ref: 'dev' },
+    head: { sha: HEAD },
+    draft: false,
+    state: 'open',
+    mergeable: true,
+    mergeable_state: 'clean',
+  };
+
+  // Safe clean PR
+  const safeResult = canMergeOldPr({
+    pr: validPr,
+    files: [{ filename: 'docs/guide.md', status: 'modified' }],
+    fileContents: ['Safe documentation update'],
+  });
+  assert.equal(safeResult.ok, true);
+
+  // Blocked if PR has merge conflicts with current dev
+  const conflictPr = { ...validPr, mergeable: false, mergeable_state: 'dirty' };
+  assert.equal(canMergeOldPr({ pr: conflictPr }).ok, false);
+
+  // Blocked if PR deletes critical application files (e.g. src/app/page.tsx or package.json)
+  const deletingPr = canMergeOldPr({
+    pr: validPr,
+    files: [{ filename: 'src/app/page.tsx', status: 'removed' }],
+  });
+  assert.equal(deletingPr.ok, false);
+  assert.match(deletingPr.reasons.join(' '), /deletes critical application files/);
+
+  // Blocked if PR introduces platform safety violations (e.g. destructive SQL or Supabase Auth)
+  const unsafePr = canMergeOldPr({
+    pr: validPr,
+    files: [{ filename: 'supabase/migrations/bad.sql', status: 'added' }],
+    fileContents: ['DROP TABLE public.products;'],
+  });
+  assert.equal(unsafePr.ok, false);
+  assert.match(unsafePr.reasons.join(' '), /Destructive SQL/);
+
+  // Blocked if PR has standing CHANGES_REQUESTED review
+  const requestedChangesPr = {
+    ...validPr,
+    reviews: [{ state: 'CHANGES_REQUESTED' }],
+  };
+  assert.equal(canMergeOldPr({ pr: requestedChangesPr }).ok, false);
 });

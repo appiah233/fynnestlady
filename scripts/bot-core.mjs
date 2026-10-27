@@ -169,6 +169,24 @@ export function validateEvidence(manifest, required = []) {
 }
 
 /**
+ * Reduces a PR's review history to each reviewer's most recent decision.
+ * Comment-only reviews do not override an earlier approval or change request.
+ * @param {Array<{user?: {login?: string}, state?: string, submitted_at?: string}>} [reviews=[]] - Raw GitHub reviews.
+ * @returns {Array<{login: string, state: string}>} Latest decisive review per reviewer.
+ */
+export function latestReviewStates(reviews = []) {
+  const latest = new Map();
+  const ordered = [...reviews].sort((a, b) => String(a?.submitted_at ?? '').localeCompare(String(b?.submitted_at ?? '')));
+  for (const review of ordered) {
+    const login = review?.user?.login;
+    const state = review?.state;
+    if (!login || !['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(state)) continue;
+    latest.set(login, state);
+  }
+  return [...latest].map(([login, state]) => ({ login, state }));
+}
+
+/**
  * Evaluates whether a pull request targeting `dev` satisfies all merge gates.
  * @param {object} [params={}] - Merge evaluation parameters.
  * @returns {{ok: boolean, reasons: string[]}} Merge eligibility verdict.
@@ -187,6 +205,60 @@ export function canMergeDev({ pr, checks = {}, evidence, requiredReviews: review
     reasons.push('Changes requested in review');
   }
   if (pr?.mergeable_state && pr.mergeable_state !== 'clean') reasons.push(`PR merge state is ${pr.mergeable_state}`);
+  return { ok: reasons.length === 0, reasons };
+}
+
+/**
+ * Evaluates whether an older or external PR can be safely merged into `dev`
+ * without harming the current application status, foundation contracts, or stability.
+ * @param {object} params
+ * @param {object} params.pr - PR metadata object from GitHub.
+ * @param {Array<{filename: string, status?: string, patch?: string}>} [params.files=[]] - Changed files.
+ * @param {string[]} [params.fileContents=[]] - File text contents for safety scanning.
+ * @param {Record<string, string>} [params.checks={}] - Completed checks.
+ * @param {boolean} [params.killSwitch=false] - Kill switch status.
+ * @returns {{ok: boolean, reasons: string[]}} Merge safety verdict.
+ */
+export function canMergeOldPr({ pr, files = [], fileContents = [], checks = {}, killSwitch = false } = {}) {
+  const reasons = [];
+  if (killSwitch) reasons.push('Kill switch enabled: FYNNESTLADY_BOT_ENABLED must be true');
+  if (pr?.base?.ref !== 'dev') reasons.push('Only PRs targeting dev can be merged');
+  if (!pr?.number || pr?.draft || pr?.state === 'closed') reasons.push('PR must be open and ready (not draft or closed)');
+  if (pr?.mergeable === false || pr?.mergeable_state === 'dirty') {
+    reasons.push('PR has merge conflicts with current dev branch: merging would harm application status');
+  }
+  if (pr?.requested_reviewers?.length) reasons.push('Unresolved review requests remain');
+  if (Array.isArray(pr?.reviews) && pr.reviews.some(r => r?.state === 'CHANGES_REQUESTED')) {
+    reasons.push('Changes have been requested in review and remain unaddressed');
+  }
+
+  // Check critical application paths: the PR must not delete critical application foundation files
+  const deletedCritical = files.filter(f => f.status === 'removed' && (
+    f.filename === 'package.json' ||
+    f.filename === 'package-lock.json' ||
+    f.filename === 'RULES.md' ||
+    f.filename.startsWith('src/') ||
+    f.filename.startsWith('public/brand/') ||
+    f.filename.startsWith('public/images/products/')
+  )).map(f => f.filename);
+  if (deletedCritical.length > 0) {
+    reasons.push(`PR deletes critical application files, which harms current application status: ${deletedCritical.join(', ')}`);
+  }
+
+  // Check platform safety & compliance on changed files
+  const paths = files.map(f => f.filename);
+  const violations = platformSafetyViolations(paths, fileContents);
+  if (violations.length > 0) {
+    reasons.push(...violations.map(v => `Platform safety violation: ${v}`));
+  }
+
+  // If checks are reported, any failure blocks merge
+  for (const [checkName, conclusion] of Object.entries(checks)) {
+    if (conclusion && conclusion !== 'success' && conclusion !== 'skipped' && conclusion !== 'neutral') {
+      reasons.push(`Check run '${checkName}' failed with result '${conclusion}'`);
+    }
+  }
+
   return { ok: reasons.length === 0, reasons };
 }
 

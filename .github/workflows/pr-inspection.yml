@@ -26,13 +26,16 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          export INSPECTION_FINDINGS_PATH=inspection-findings.json
           node scripts/pr-inspection.mjs | tee inspection-summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Keep inspection summary for the final review
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: inspection-summary
-          path: inspection-summary.md
+          path: |
+            inspection-summary.md
+            inspection-findings.json
           if-no-files-found: ignore
           retention-days: 7
 
@@ -99,29 +102,62 @@ jobs:
           set -euo pipefail
           failed=$(awk -F'\t' '$3 != "success" && $3 != "skipped" && $3 != "neutral"' checks.tsv | grep -c . || true)
           if [ "$INSPECT_RESULT" = "success" ] && [ "$failed" -eq 0 ]; then
-            event="APPROVE"; verdict="All checks passed"
+            event="APPROVE"
+            {
+              echo "## ✅ Fynnestlady Engineering Bot Review: Approved"
+              echo
+              echo "**Verdict:** ✅ **APPROVED** — All platform safety, architecture, authentication, database, and verification checks passed without harming the platform."
+              echo
+              echo "Commit: \`$HEAD_SHA\`"
+              echo
+              echo "### 📋 Check Run Status:"
+              echo "| Check | Result |"
+              echo "| --- | --- |"
+              sort checks.tsv | awk -F'\t' '{ icon = ($3=="success") ? "✅" : (($3=="skipped" || $3=="neutral") ? "⏭️" : "❌"); printf "| [%s](%s) | %s %s |\n", $1, $4, icon, $3 }'
+              echo
+              if [ -f inspection/inspection-summary.md ]; then
+                echo "<details><summary>Platform safety and compliance inspection report</summary>"
+                echo
+                cat inspection/inspection-summary.md
+                echo
+                echo "</details>"
+              fi
+            } > review.md
           else
-            event="REQUEST_CHANGES"; verdict="Blocked: one or more checks did not pass"
+            event="REQUEST_CHANGES"
+            {
+              echo "## 🛑 Fynnestlady Engineering Bot Review: Changes Requested"
+              echo
+              echo "**Verdict:** ❌ **BLOCKED** — Changes cannot be approved because they may harm the platform or fail compliance requirements."
+              echo
+              echo "Commit: \`$HEAD_SHA\`"
+              echo
+              echo "### ⚠️ Why this PR cannot be approved (Platform Harm & Compliance Risks):"
+              if [ -f inspection/inspection-findings.json ]; then
+                node -e "try { const f = JSON.parse(require('fs').readFileSync('inspection/inspection-findings.json','utf8')).findings || []; if (f.length) { f.forEach(i => console.log('- ' + i)); } else { console.log('- One or more verification checks failed below.'); } } catch { console.log('- Inspection reported failure.'); }"
+              else
+                echo "- Platform safety inspection or verification checks failed."
+              fi
+              if [ "$failed" -gt 0 ]; then
+                echo
+                echo "### ❌ Failed Verification Checks:"
+                awk -F'\t' '$3 != "success" && $3 != "skipped" && $3 != "neutral" { printf "- [%s](%s): %s\n", $1, $4, $3 }' checks.tsv
+              fi
+              echo
+              echo "### 📋 Complete Check Run Status:"
+              echo "| Check | Result |"
+              echo "| --- | --- |"
+              sort checks.tsv | awk -F'\t' '{ icon = ($3=="success") ? "✅" : (($3=="skipped" || $3=="neutral") ? "⏭️" : "❌"); printf "| [%s](%s) | %s %s |\n", $1, $4, icon, $3 }'
+              echo
+              if [ -f inspection/inspection-summary.md ]; then
+                echo "<details><summary>Platform safety and compliance inspection report</summary>"
+                echo
+                cat inspection/inspection-summary.md
+                echo
+                echo "</details>"
+              fi
+            } > review.md
           fi
-          {
-            echo "## Fynnestlady Engineering Bot: final review"
-            echo
-            echo "**Verdict:** $verdict"
-            echo
-            echo "Commit: \`$HEAD_SHA\`"
-            echo
-            echo "| Check | Result |"
-            echo "| --- | --- |"
-            sort checks.tsv | awk -F'\t' '{ icon = ($3=="success") ? "✅" : (($3=="skipped" || $3=="neutral") ? "⏭️" : "❌"); printf "| [%s](%s) | %s %s |\n", $1, $4, icon, $3 }'
-            echo
-            if [ -f inspection/inspection-summary.md ]; then
-              echo "<details><summary>Platform safety and compliance inspection</summary>"
-              echo
-              cat inspection/inspection-summary.md
-              echo
-              echo "</details>"
-            fi
-          } > review.md
           echo "event=$event" >> "$GITHUB_OUTPUT"
 
       - name: Mint GitHub App token
@@ -150,4 +186,6 @@ jobs:
             exit 0
           fi
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
-            -f commit_id="$HEAD_SHA" -f event="$EVENT" -F body=@review.md
+            -f commit_id="$HEAD_SHA" -f event="$EVENT" -F body=@review.md || \
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
+            -f commit_id="$HEAD_SHA" -f event="COMMENT" -F body=@review.md
