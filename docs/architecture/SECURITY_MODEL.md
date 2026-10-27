@@ -1,6 +1,6 @@
 # Security Model
 
-Status: Milestone 0 baseline. ADR-014 and `.github/fynnestlady/architecture-policy.yml` supersede the Auth.js, AWS, EC2, and S3 implementation proposals below. Supabase Auth/PostgreSQL/Storage, Vercel, and the engineering bot require updated negative authorization, RLS, storage, CI-token, and deployment verification before release. See `docs/architecture/THREAT_MODEL.md` for the bot control plane.
+Status: Milestone 0 baseline. ADR-006, ADR-014, and `.github/fynnestlady/architecture-policy.yml` supersede the Auth.js, AWS, EC2, and S3 implementation proposals below. Clerk identity with Supabase PostgreSQL/Storage, Vercel, and the engineering bot require updated negative authorization, RLS, storage, CI-token, and deployment verification before release. See `docs/architecture/THREAT_MODEL.md` for the bot control plane.
 
 ## Objectives
 
