@@ -1,6 +1,8 @@
 # ADR-011: GitHub Governance
 
-Status: **Proposed**
+Status: **Superseded by ADR-014 on 2026-10-26**
+
+This record preserves the initial owner-only merge proposal. The later owner instruction authorizes Fynnestlady Engineering Bot to merge eligible `dev` PRs and routine releases through protected gates. See ADR-014; do not use this record as the active merge policy.
 
 ## Context
 The public repository needs controlled changes and owner-only merge authority.
@@ -9,9 +11,9 @@ Create review and evidence gates without giving automation merge power.
 ## Options
 Direct pushes; PRs with CI/review; autonomous merge.
 ## Decision
-Use scoped branches, pull requests, minimal-permission CI, CODEOWNERS, specialist review, PR inspection, and Eric-only merge authority.
+Use permanent `dev` integration and `main` production branches, scoped working branches targeting `dev`, release PRs from `dev` to `main`, minimal-permission CI, CODEOWNERS, specialist review, PR inspection, and Eric-only merge authority.
 ## Consequences
-Traceability and independent checks; repository rules require separate manual verification/configuration.
+Traceability, staged integration, and independent checks; repository rules and protected environments require separate manual verification/configuration.
 ## Risks
 Documented controls may not match GitHub settings until enabled.
 ## Alternatives

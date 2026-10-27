@@ -6,6 +6,7 @@ const required = [
   "RULES.md",
   "docs/governance/BUILDING_MEMO.md",
   "docs/governance/PROJECT_GOVERNANCE.md",
+  "docs/governance/BRANCHING_AND_DELIVERY.md",
   "docs/brand/ABOUT_FYNNESTLADY.md",
   "docs/product/PRODUCT_VISION.md",
   "docs/architecture/ARCHITECTURE.md",
@@ -18,6 +19,7 @@ const required = [
   ".github/pull_request_template.md",
   ".github/workflows/foundation.yml",
   ".github/workflows/pr-inspection.yml",
+  ".github/workflows/secret-scan.yml",
 ];
 
 const failures = [];
@@ -64,6 +66,7 @@ if (/Verdict:\s*\*\*(?:APPROVED FOR MERGE|AUTO MERGE|MERGED)\*\*/.test(inspector
 const rules = existsSync(join(root, "RULES.md")) ? readFileSync(join(root, "RULES.md"), "utf8") : "";
 if (!rules.includes("Eric Appiah Owusu")) failures.push("RULES.md does not preserve owner authority");
 if (!rules.includes("server controls prices")) failures.push("RULES.md lacks server-authoritative pricing rule");
+if (!rules.includes("`main` is the production branch; `dev` is the integration branch")) failures.push("RULES.md lacks the permanent branch model");
 
 if (failures.length) {
   console.error(failures.join("\n"));

@@ -15,6 +15,7 @@ const lines = [
   "",
   "This deterministic foundation check does not replace Architecture, Product, Database, Security, Design, Testing, or human content review.",
   "",
-  "Inspection complete. Merge authority remains exclusively with Eric Appiah Owusu. FynnestladyPRBot has not merged this pull request.",
+  "Inspection complete. This inspector does not merge. The dedicated Engineering Bot may merge eligible work only after all independent gates and branch protection pass.",
 ];
 console.log(lines.join("\n"));
+if (missing.length) process.exitCode = 1;
