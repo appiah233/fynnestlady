@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Check out dev
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: dev
           fetch-depth: 0
@@ -32,7 +32,7 @@ jobs:
       - name: Mint GitHub App token
         if: ${{ vars.FYNNESTLADY_USE_GITHUB_APP == 'true' }}
         id: app
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
         with:
           app-id: ${{ secrets.FYNNESTLADY_APP_ID }}
           private-key: ${{ secrets.FYNNESTLADY_APP_PRIVATE_KEY }}
