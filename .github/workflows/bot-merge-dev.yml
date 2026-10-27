@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   merge:
-    if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.path == '.github/workflows/evidence-publisher.yml' && github.event.workflow_run.head_repository.full_name == github.repository)) }}
+    if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' && vars.FYNNESTLADY_USE_GITHUB_APP == 'true' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.path == '.github/workflows/evidence-publisher.yml' && github.event.workflow_run.head_repository.full_name == github.repository)) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -88,8 +88,7 @@ jobs:
           BOT_TARGET_DIR: ${{ github.workspace }}/candidate
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/bot.mjs evidence
-      - name: Mint GitHub App token (when configured)
-        if: ${{ vars.FYNNESTLADY_USE_GITHUB_APP == 'true' }}
+      - name: Mint dedicated GitHub App token
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
         id: app
         with:
@@ -100,7 +99,7 @@ jobs:
           permission-issues: write
       - name: Squash merge eligible PR and delete branch
         env:
-          GITHUB_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
           BOT_PR_NUMBER: ${{ steps.pull.outputs.number }}
           BOT_SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
           BOT_EVIDENCE_PATH: ${{ github.workspace }}/evidence/bot-evidence.json
