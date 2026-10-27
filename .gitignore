@@ -21,7 +21,10 @@ test-results/
 Thumbs.db
 .idea/
 .vscode/
+.gemini/
+gha-creds-*.json
 
 # Prisma/local data
 *.db
 *.db-journal
+*.tsbuildinfo
