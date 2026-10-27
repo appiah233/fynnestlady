@@ -158,4 +158,3 @@ export async function fetchProductBySlug(
   const all = await fetchAllProducts();
   return all.find((p) => p.slug === slug);
 }
-
