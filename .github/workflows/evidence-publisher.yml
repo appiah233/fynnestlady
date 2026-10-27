@@ -88,10 +88,6 @@ jobs:
     needs: roles
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    permissions:
-      contents: read
-      pull-requests: write
-      checks: read
     steps:
       - name: Check out trusted evidence assembler
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -174,30 +170,3 @@ jobs:
           path: bot-evidence.json
           if-no-files-found: error
           retention-days: 30
-      - name: Mint GitHub App token for evidence review
-        if: ${{ vars.FYNNESTLADY_USE_GITHUB_APP == 'true' }}
-        id: app
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
-        with:
-          app-id: ${{ secrets.FYNNESTLADY_APP_ID }}
-          private-key: ${{ secrets.FYNNESTLADY_APP_PRIVATE_KEY }}
-          permission-contents: read
-          permission-pull-requests: write
-      - name: Submit Fynnestlady Engineering Bot approval for verified evidence
-        if: ${{ steps.app.outputs.token != '' }}
-        env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
-          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          BODY="Verified by **Fynnestlady Engineering Bot** (\`fynnestlady-engineering-bot[bot]\`). All required quality, security, database, accessibility, governance, and specialist role evidence gates passed for commit \`$COMMIT_SHA\`."
-          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
-            -f commit_id="$COMMIT_SHA" \
-            -f event="APPROVE" \
-            -f body="$BODY" || \
-          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
-            -f commit_id="$COMMIT_SHA" \
-            -f event="COMMENT" \
-            -f body="$BODY"

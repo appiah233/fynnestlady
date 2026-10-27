@@ -7,7 +7,12 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
+  pull-requests: read
+
+# Only the newest run per PR may post the final review.
+concurrency:
+  group: fynnestlady-pr-bot-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   inspect:
@@ -15,12 +20,112 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
       - name: Inspect pull request evidence
-        id: inspect
+        shell: bash
         run: |
+          set -o pipefail
           node scripts/pr-inspection.mjs | tee inspection-summary.md >> "$GITHUB_STEP_SUMMARY"
-      - name: Mint GitHub App token for PR review
-        if: ${{ always() && vars.FYNNESTLADY_USE_GITHUB_APP == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+      - name: Keep inspection summary for the final review
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: inspection-summary
+          path: inspection-summary.md
+          if-no-files-found: ignore
+          retention-days: 7
+
+  final-review:
+    name: Bot final review
+    needs: inspect
+    # Runs whether inspection passed or failed, but never for forks (no App secrets there).
+    if: ${{ always() && vars.FYNNESTLADY_USE_GITHUB_APP == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      checks: read
+      pull-requests: read
+    env:
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      SELF_CHECK_NAME: Bot final review
+      BOT_LOGIN: fynnestlady-engineering-bot[bot]
+    steps:
+      - name: Download inspection summary
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: inspection-summary
+          path: inspection
+        continue-on-error: true
+
+      - name: Wait until every other check on the head commit has finished
+        id: wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 80 * 60))
+          # Give the other PR workflows time to register their check runs.
+          sleep 60
+          while true; do
+            gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs?filter=latest&per_page=100" --paginate \
+              --jq '.check_runs[] | [.name, .status, (.conclusion // ""), .html_url] | @tsv' \
+              | awk -F'\t' -v self="$SELF_CHECK_NAME" '$1 != self' > checks.tsv
+            total=$(grep -c . checks.tsv || true)
+            pending=$(awk -F'\t' '$2 != "completed"' checks.tsv | grep -c . || true)
+            echo "checks: total=$total pending=$pending"
+            if [ "$total" -gt 0 ] && [ "$pending" -eq 0 ]; then
+              echo "complete=true" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::Checks still running after 80 minutes; the bot will not post a partial review."
+              echo "complete=false" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+            sleep 30
+          done
+
+      - name: Build the consolidated review
+        id: build
+        if: ${{ steps.wait.outputs.complete == 'true' }}
+        env:
+          INSPECT_RESULT: ${{ needs.inspect.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=$(awk -F'\t' '$3 != "success" && $3 != "skipped" && $3 != "neutral"' checks.tsv | grep -c . || true)
+          if [ "$INSPECT_RESULT" = "success" ] && [ "$failed" -eq 0 ]; then
+            event="APPROVE"; verdict="All checks passed"
+          else
+            event="REQUEST_CHANGES"; verdict="Blocked: one or more checks did not pass"
+          fi
+          {
+            echo "## Fynnestlady Engineering Bot: final review"
+            echo
+            echo "**Verdict:** $verdict"
+            echo
+            echo "Commit: \`$HEAD_SHA\`"
+            echo
+            echo "| Check | Result |"
+            echo "| --- | --- |"
+            sort checks.tsv | awk -F'\t' '{ icon = ($3=="success") ? "✅" : (($3=="skipped" || $3=="neutral") ? "⏭️" : "❌"); printf "| [%s](%s) | %s %s |\n", $1, $4, icon, $3 }'
+            echo
+            if [ -f inspection/inspection-summary.md ]; then
+              echo "<details><summary>Platform safety and compliance inspection</summary>"
+              echo
+              cat inspection/inspection-summary.md
+              echo
+              echo "</details>"
+            fi
+          } > review.md
+          echo "event=$event" >> "$GITHUB_OUTPUT"
+
+      - name: Mint GitHub App token
+        if: ${{ steps.build.outputs.event != '' }}
         id: app
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
         with:
@@ -28,27 +133,21 @@ jobs:
           private-key: ${{ secrets.FYNNESTLADY_APP_PRIVATE_KEY }}
           permission-contents: read
           permission-pull-requests: write
-      - name: Submit Fynnestlady Engineering Bot review on PR
-        if: ${{ always() && steps.app.outputs.token != '' }}
+
+      - name: Post one review per commit
+        if: ${{ steps.app.outputs.token != '' }}
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
-          INSPECT_OUTCOME: ${{ steps.inspect.outcome }}
+          EVENT: ${{ steps.build.outputs.event }}
         shell: bash
         run: |
           set -euo pipefail
-          BODY="$(cat inspection-summary.md)"
-          if [ "$INSPECT_OUTCOME" = "success" ]; then
-            EVENT="COMMENT"
-          else
-            EVENT="REQUEST_CHANGES"
+          already=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews?per_page=100" --paginate \
+            --jq "[.[] | select(.user.login == \"$BOT_LOGIN\" and .commit_id == \"$HEAD_SHA\")] | length" \
+            | awk '{ s += $1 } END { print s + 0 }')
+          if [ "$already" -gt 0 ]; then
+            echo "The bot already reviewed $HEAD_SHA; not posting again."
+            exit 0
           fi
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
-            -f commit_id="$COMMIT_SHA" \
-            -f event="$EVENT" \
-            -f body="$BODY" || \
-          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
-            -f commit_id="$COMMIT_SHA" \
-            -f event="COMMENT" \
-            -f body="$BODY"
+            -f commit_id="$HEAD_SHA" -f event="$EVENT" -F body=@review.md
