@@ -46,3 +46,4 @@ jobs:
           BOT_PR_NUMBER: ${{ inputs.pr_number }}
           FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
         run: node scripts/bot.mjs merge-old-pr
+

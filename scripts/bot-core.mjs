@@ -224,8 +224,8 @@ export function canMergeOldPr({ pr, files = [], fileContents = [], checks = {}, 
   if (killSwitch) reasons.push('Kill switch enabled: FYNNESTLADY_BOT_ENABLED must be true');
   if (pr?.base?.ref !== 'dev') reasons.push('Only PRs targeting dev can be merged');
   if (!pr?.number || pr?.draft || pr?.state === 'closed') reasons.push('PR must be open and ready (not draft or closed)');
-  if (pr?.mergeable === false || pr?.mergeable_state === 'dirty') {
-    reasons.push('PR has merge conflicts with current dev branch: merging would harm application status');
+  if (pr?.mergeable !== true || pr?.mergeable_state === 'dirty') {
+    reasons.push('PR has merge conflicts or unresolved merge state with current dev branch: merging would harm application status');
   }
   if (pr?.requested_reviewers?.length) reasons.push('Unresolved review requests remain');
   if (Array.isArray(pr?.reviews) && pr.reviews.some(r => r?.state === 'CHANGES_REQUESTED')) {
