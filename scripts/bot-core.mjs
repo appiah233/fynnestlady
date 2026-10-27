@@ -219,7 +219,7 @@ export function canMergeDev({ pr, checks = {}, evidence, requiredReviews: review
  * @param {boolean} [params.killSwitch=false] - Kill switch status.
  * @returns {{ok: boolean, reasons: string[]}} Merge safety verdict.
  */
-export function canMergeOldPr({ pr, files = [], fileContents = [], checks = {}, killSwitch = false } = {}) {
+export function canMergeOldPr({ pr, files = [], fileContents = [], checks = {}, evidence, requiredReviews: reviews = [], killSwitch = false } = {}) {
   const reasons = [];
   if (killSwitch) reasons.push('Kill switch enabled: FYNNESTLADY_BOT_ENABLED must be true');
   if (pr?.base?.ref !== 'dev') reasons.push('Only PRs targeting dev can be merged');
@@ -252,11 +252,11 @@ export function canMergeOldPr({ pr, files = [], fileContents = [], checks = {}, 
     reasons.push(...violations.map(v => `Platform safety violation: ${v}`));
   }
 
-  // If checks are reported, any failure blocks merge
-  for (const [checkName, conclusion] of Object.entries(checks)) {
-    if (conclusion && conclusion !== 'success' && conclusion !== 'skipped' && conclusion !== 'neutral') {
-      reasons.push(`Check run '${checkName}' failed with result '${conclusion}'`);
-    }
+  if (pr?.head?.sha !== evidence?.headSha) reasons.push('Evidence does not match PR head');
+  reasons.push(...validateEvidence(evidence, reviews).reasons);
+  for (const check of REQUIRED_CHECKS) if (checks[check] !== 'success') reasons.push(`Required check '${check}' is not successful`);
+  if (files.length >= 100 || files.some(f => f.patch === undefined && f.status !== 'removed')) {
+    reasons.push('Changed-file list or patch content is incomplete; cannot verify safety');
   }
 
   return { ok: reasons.length === 0, reasons };

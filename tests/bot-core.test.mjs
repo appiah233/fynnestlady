@@ -253,10 +253,14 @@ test('canMergeOldPr safely allows merge only if it does not harm current applica
   // Safe clean PR
   const safeResult = canMergeOldPr({
     pr: validPr,
-    files: [{ filename: 'docs/guide.md', status: 'modified' }],
+    files: [{ filename: 'docs/guide.md', status: 'modified', patch: 'Safe documentation update' }],
     fileContents: ['Safe documentation update'],
+    checks: mergeInput().checks,
+    evidence: passingEvidence(),
+    requiredReviews: ROLES,
   });
   assert.equal(safeResult.ok, true);
+  assert.equal(canMergeOldPr({ pr: validPr }).ok, false, 'missing checks and evidence must block');
 
   // Blocked if PR has merge conflicts with current dev
   const conflictPr = { ...validPr, mergeable: false, mergeable_state: 'dirty' };

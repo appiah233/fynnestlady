@@ -124,22 +124,17 @@ export async function fetchAllProducts(): Promise<Product[]> {
         .order("created_at", { ascending: true })
         .abortSignal(AbortSignal.timeout(2500));
 
-      const result =
-        !error && data && data.length > 0
-          ? (data as SupabaseProductRow[]).map(mapSupabaseRowToProduct)
-          : VERIFIED_PRODUCTS;
+      if (error) throw error;
+      const result = ((data ?? []) as SupabaseProductRow[]).map(mapSupabaseRowToProduct);
 
       globalForCatalogue.__fynnestladyCatalogueCache = {
         products: result,
         expiresAt: Date.now() + CATALOGUE_CACHE_TTL_MS,
       };
       return result;
-    } catch {
-      globalForCatalogue.__fynnestladyCatalogueCache = {
-        products: VERIFIED_PRODUCTS,
-        expiresAt: Date.now() + CATALOGUE_CACHE_TTL_MS,
-      };
-      return VERIFIED_PRODUCTS;
+    } catch (error) {
+      globalForCatalogue.__fynnestladyCatalogueCache = undefined;
+      throw error;
     }
   })();
 

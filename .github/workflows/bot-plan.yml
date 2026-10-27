@@ -58,7 +58,7 @@ jobs:
           if [ -n "$GEMINI_PLAN_OUTPUT" ]; then
             printf '%s\n' "$GEMINI_PLAN_OUTPUT" > bot-plan.txt
           else
-            printf 'decision: READY\nissue: #%s\n' "$BOT_ISSUE_NUMBER" > bot-plan.txt
+            printf 'decision: BLOCKED\nreason: no planning model configured\nissue: #%s\n' "$BOT_ISSUE_NUMBER" > bot-plan.txt
           fi
           test -s bot-plan.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -87,7 +87,7 @@ jobs:
       - name: Require planning output
         run: |
           test -s bot-plan/bot-plan.txt
-          grep -q 'decision: READY' bot-plan/bot-plan.txt
+          node -e "const s=require('fs').readFileSync('bot-plan/bot-plan.txt','utf8').trim();let decision;try{decision=JSON.parse(s).decision}catch{decision=/^decision:\s*(READY|BLOCKED)\s*$/m.exec(s)?.[1]}if(decision!=='READY')process.exit(1)"
       - name: Mint GitHub App token (when configured)
         if: ${{ vars.FYNNESTLADY_USE_GITHUB_APP == 'true' }}
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349

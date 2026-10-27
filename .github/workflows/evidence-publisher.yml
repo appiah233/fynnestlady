@@ -138,7 +138,8 @@ jobs:
             const runs = (await response.json()).check_runs || [];
             latest = new Map();
             for (const run of runs) {
-              if (freshEvent && Date.parse(run.started_at || run.created_at || '') < eventTime) continue;
+              const reuseReadyHeadCheck = process.env.BOT_EVENT_ACTION === 'ready_for_review' && ['governance', 'scan'].includes(run.name);
+              if (freshEvent && !reuseReadyHeadCheck && Date.parse(run.started_at || run.created_at || '') < eventTime) continue;
               const previous = latest.get(run.name);
               if (!previous || Date.parse(run.started_at || run.created_at || '') > Date.parse(previous.started_at || previous.created_at || '') ||
                   (run.started_at === previous.started_at && run.id > previous.id)) latest.set(run.name, run);

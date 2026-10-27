@@ -13,6 +13,7 @@ permissions:
   contents: read
   pull-requests: read
   deployments: read
+  actions: read
 env:
   FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
   FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
@@ -32,13 +33,44 @@ jobs:
         with:
           ref: main
           persist-credentials: false
+      - name: Resolve exact release head and successful evidence run
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BOT_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$BOT_PR_NUMBER")"
+          base="$(jq -r '.base.ref' <<< "$pr")"
+          head_ref="$(jq -r '.head.ref' <<< "$pr")"
+          head_repo="$(jq -r '.head.repo.full_name' <<< "$pr")"
+          sha="$(jq -r '.head.sha' <<< "$pr")"
+          test "$base" = main && test "$head_ref" = dev && test "$head_repo" = "$GITHUB_REPOSITORY"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+          run_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/evidence-publisher.yml/runs?head_sha=$sha&status=completed&per_page=100" --jq '.workflow_runs | map(select(.conclusion == "success" and .event == "pull_request")) | .[0].id')"
+          [[ "$run_id" =~ ^[0-9]+$ ]]
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
       - name: Check out candidate release branch as data
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.pull_request.head.sha || 'dev' }}
+          ref: ${{ steps.release.outputs.sha }}
           path: candidate
           fetch-depth: 0
           persist-credentials: false
+      - name: Download trusted evidence for release head
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: bot-evidence
+          path: evidence
+          run-id: ${{ steps.release.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify evidence head
+        env:
+          BOT_HEAD_SHA: ${{ steps.release.outputs.sha }}
+          BOT_EVIDENCE_PATH: ${{ github.workspace }}/evidence/bot-evidence.json
+        run: node -e "const e=require(process.env.BOT_EVIDENCE_PATH);if(e.headSha!==process.env.BOT_HEAD_SHA)process.exit(1)"
       - name: Require trusted production controller on main
         run: |
           if [ ! -f scripts/bot.mjs ]; then
@@ -49,6 +81,7 @@ jobs:
         env:
           BOT_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
           BOT_TARGET_DIR: ${{ github.workspace }}/candidate
+          BOT_EVIDENCE_PATH: ${{ github.workspace }}/evidence/bot-evidence.json
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/bot.mjs production-gate
       - name: Failure summary
