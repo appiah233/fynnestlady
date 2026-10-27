@@ -2,7 +2,7 @@ name: Production gate
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -21,7 +21,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   production-gate:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
+    # The first control-plane validation is a draft until the owner enables promotion.
+    if: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false) }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -37,6 +38,12 @@ jobs:
           path: candidate
           fetch-depth: 0
           persist-credentials: false
+      - name: Require trusted production controller on main
+        run: |
+          if [ ! -f scripts/bot.mjs ]; then
+            echo '::error::main does not yet contain the trusted production controller. Bootstrap it through a protected owner-reviewed PR before enabling promotion.'
+            exit 1
+          fi
       - name: Validate release evidence, migrations, preview and rollback
         env:
           BOT_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
