@@ -656,7 +656,26 @@ async function productionGate() { production(); await evidenceGate(); await data
  * Runs a post-deployment HTTPS health check against `BOT_DEPLOYMENT_URL`.
  */
 async function smoke() {
-  const url = process.env.BOT_DEPLOYMENT_URL;
+  const deploymentId = process.env.BOT_DEPLOYMENT_ID;
+  let url = process.env.BOT_DEPLOYMENT_URL;
+  const contextPath = process.env.BOT_DEPLOYMENT_CONTEXT_PATH;
+  let context = contextPath && existsSync(contextPath) ? JSON.parse(await readFile(contextPath, 'utf8')) : {};
+  if (deploymentId && (!context.sha || !context.environment || !url)) {
+    const deployment = await api(`deployments/${encodeURIComponent(deploymentId)}`);
+    const statuses = await api(`deployments/${encodeURIComponent(deploymentId)}/statuses?per_page=1`);
+    context = {
+      id: deployment.id,
+      sha: deployment.sha,
+      environment: deployment.environment,
+      url: url || statuses[0]?.environment_url || statuses[0]?.target_url || '',
+    };
+    url = context.url;
+    if (contextPath) {
+      await mkdir(resolve(contextPath, '..'), { recursive: true });
+      await writeFile(contextPath, JSON.stringify(context, null, 2));
+    }
+  }
+  assert(context.environment === 'Production', 'Smoke check only supports Production deployments');
   assert(url && /^https:\/\//.test(url), 'Verified HTTPS deployment URL required');
   const response = await fetch(new URL('/api/health', url), { redirect: 'error', signal: AbortSignal.timeout(10000) });
   assert(response.ok, `Deployment health failed: HTTP ${response.status}`);
@@ -667,7 +686,116 @@ async function smoke() {
  */
 async function rollback() {
   production();
-  throw new Error('Automatic rollback requires a verified previous deployment ID and a no-migration impact decision');
+  const runId = Number(process.env.BOT_FAILED_RUN_ID);
+  let context = {};
+  let failedRun;
+  let result = 'BLOCKED';
+  let reason = '';
+  let previousUrl = '';
+
+  try {
+    const contextPath = process.env.BOT_DEPLOYMENT_CONTEXT_PATH;
+    if (contextPath && existsSync(contextPath)) context = JSON.parse(await readFile(contextPath, 'utf8'));
+    context.id ||= process.env.BOT_DEPLOYMENT_ID || '';
+    if (!context.id && Number.isSafeInteger(runId) && runId > 0) {
+      failedRun = await api(`actions/runs/${runId}`);
+      context.sha ||= failedRun.head_sha;
+      context.id = `smoke-run-${runId}`;
+    }
+    if (context.id && !context.id.startsWith('smoke-run-')) {
+      const deployment = await api(`deployments/${encodeURIComponent(context.id)}`);
+      const statuses = await api(`deployments/${encodeURIComponent(context.id)}/statuses?per_page=1`);
+      context.sha ||= deployment.sha;
+      context.environment ||= deployment.environment;
+      context.url ||= statuses[0]?.environment_url || statuses[0]?.target_url || '';
+    }
+    if (!failedRun && Number.isSafeInteger(runId) && runId > 0) failedRun = await api(`actions/runs/${runId}`);
+    if (failedRun) {
+      assert(failedRun.name === 'Post deployment smoke', 'Rollback trigger is not the production smoke workflow');
+      assert(failedRun.conclusion === 'failure', 'Rollback trigger did not fail');
+      context.sha ||= failedRun.head_sha;
+    }
+    assert(context.environment === 'Production', 'Failed deployment is not in the Production environment');
+    assert(/^[0-9a-f]{40}$/i.test(String(context.sha || '')), 'Failed deployment commit SHA is missing or invalid');
+    assert(process.env.VERCEL_TOKEN, 'VERCEL_TOKEN secret is required for automatic production rollback');
+    assert(/^team_[A-Za-z0-9]+$/.test(process.env.VERCEL_ORG_ID || ''), 'VERCEL_ORG_ID repository variable must contain the Vercel team ID');
+    assert(/^prj_[A-Za-z0-9]+$/.test(process.env.VERCEL_PROJECT_ID || ''), 'VERCEL_PROJECT_ID repository variable must contain the Vercel project ID');
+    const productionUrl = new URL(process.env.VERCEL_PRODUCTION_URL || '');
+    assert(productionUrl.protocol === 'https:' && productionUrl.pathname === '/', 'VERCEL_PRODUCTION_URL must be an HTTPS origin');
+
+    const params = new URLSearchParams({ projectId: process.env.VERCEL_PROJECT_ID, target: 'production', limit: '20', teamId: process.env.VERCEL_ORG_ID });
+    const vercelResponse = await fetch(`https://api.vercel.com/v6/deployments?${params}`, {
+      headers: { Authorization: `Bearer ${process.env.VERCEL_TOKEN}` },
+      signal: AbortSignal.timeout(20000),
+    });
+    assert(vercelResponse.ok, `Vercel deployment lookup failed: HTTP ${vercelResponse.status}`);
+    const deployments = (await vercelResponse.json()).deployments || [];
+    const readyProduction = deployments
+      .filter(d => d.target === 'production' && d.readyState === 'READY' && d.url)
+      .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+    const activeIndex = readyProduction.findIndex(d => String(d.meta?.githubCommitSha || '').toLowerCase() === String(context.sha).toLowerCase());
+    assert(activeIndex === 0, 'Failed deployment is not the current Vercel production deployment; skipped rollback to protect a newer release');
+    const previous = readyProduction[activeIndex + 1];
+    assert(previous?.url, 'No earlier ready production deployment is available for rollback');
+    const previousSha = String(previous.meta?.githubCommitSha || '');
+    assert(/^[0-9a-f]{40}$/i.test(previousSha), 'Previous deployment commit SHA is unavailable; cannot verify rollback compatibility');
+    const comparison = await api(`compare/${previousSha}...${context.sha}`);
+    const migrations = (comparison.files || []).map(file => file.filename).filter(path => /^supabase\/migrations\//i.test(path));
+    assert(migrations.length === 0, `Database migrations changed after the previous production deployment (${migrations.join(', ')}); human data-compatibility review is required`);
+    previousUrl = /^https:\/\//.test(previous.url) ? previous.url : `https://${previous.url}`;
+
+    await mkdir('.vercel', { recursive: true });
+    await writeFile('.vercel/project.json', JSON.stringify({ orgId: process.env.VERCEL_ORG_ID, projectId: process.env.VERCEL_PROJECT_ID }));
+    run('npx', ['--yes', 'vercel@48.10.0', 'rollback', previousUrl, '--token', process.env.VERCEL_TOKEN, '--timeout', '120s']);
+    run('npx', ['--yes', 'vercel@48.10.0', 'rollback', 'status', '--token', process.env.VERCEL_TOKEN, '--timeout', '120s']);
+
+    const health = await fetch(new URL('/api/health', productionUrl), { redirect: 'error', signal: AbortSignal.timeout(15000) });
+    assert(health.ok, `Post-rollback production health failed: HTTP ${health.status}`);
+    result = 'ROLLED_BACK_AND_HEALTHY';
+    reason = `Production smoke failed for deployment ${context.id}; Vercel rolled traffic back to the previous production deployment and the canonical health endpoint returned HTTP ${health.status}.`;
+  } catch (error) {
+    const raw = String(error?.message || error);
+    reason = raw.replaceAll(process.env.VERCEL_TOKEN || '\0', '[REDACTED]').slice(0, 1200);
+  }
+
+  const runUrl = failedRun?.html_url || (Number.isSafeInteger(runId) && runId > 0 ? `https://github.com/${repository}/actions/runs/${runId}` : 'manual workflow dispatch');
+  const identity = context.id || process.env.BOT_DEPLOYMENT_ID || `smoke-run-${runId || 'unknown'}`;
+  const issueTitle = `Production rollback incident: ${identity}`;
+  const body = [
+    `## Production rollback ${result === 'ROLLED_BACK_AND_HEALTHY' ? 'completed' : 'blocked or failed'}`,
+    '',
+    `**Reason:** ${reason || 'No recovery result was recorded.'}`,
+    `**Deployment:** ${identity}`,
+    `**Commit:** ${context.sha || 'unknown'}`,
+    `**Failed smoke run:** ${runUrl}`,
+    previousUrl ? `**Restored deployment:** ${previousUrl}` : '',
+    '',
+    'The bot did not revert database, payment, order, or inventory state.',
+  ].filter(Boolean).join('\n');
+  const issues = await api('issues?state=all&per_page=100');
+  let incident = issues.find(item => !item.pull_request && item.title === issueTitle);
+  if (!incident) {
+    incident = await api('issues', { method: 'POST', body: {
+      title: issueTitle,
+      body: `Automated incident record for failed production smoke run ${runUrl}. The bot will record the rollback decision and health verification here.`,
+      labels: ['bug', 'bot-owned', 'subsystem:bot-control-plane'],
+    } });
+  }
+  await api(`issues/${incident.number}/comments`, { method: 'POST', body: { body } });
+
+  if (/^[0-9a-f]{40}$/i.test(String(context.sha || ''))) {
+    const releases = await api('pulls?state=closed&base=main&per_page=100');
+    const releasePr = releases.find(pr => pr.merged_at && (
+      pr.merge_commit_sha?.toLowerCase() === context.sha.toLowerCase() ||
+      pr.head?.sha?.toLowerCase() === context.sha.toLowerCase() ||
+      String(pr.body || '').toLowerCase().includes(context.sha.toLowerCase())
+    ));
+    if (releasePr) await api(`issues/${releasePr.number}/comments`, { method: 'POST', body: { body } });
+  }
+
+  await output('rollback_result', result);
+  await output('incident_issue', incident.number);
+  if (result !== 'ROLLED_BACK_AND_HEALTHY') throw new Error(`Automatic rollback did not complete: ${reason}`);
 }
 /**
  * Inspects open Dependabot PRs targeting `dev`.
