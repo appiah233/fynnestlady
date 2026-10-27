@@ -29,3 +29,4 @@ gha-creds-*.json
 # Prisma/local data
 *.db
 *.db-journal
+*.tsbuildinfo
