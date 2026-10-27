@@ -431,8 +431,17 @@ async function remediate(e) {
 async function devHealth() {
   active();
   const dev = await branch('dev');
-  const checks = await checksFor(dev.commit.sha);
-  assert(checks.governance === 'success' && checks.scan === 'success', 'dev health failed: required checks incomplete or failing');
+  const required = ['governance', 'scan'];
+  const deadline = Date.now() + 15 * 60 * 1000;
+  let checks;
+  while (Date.now() < deadline) {
+    checks = await checksFor(dev.commit.sha);
+    const failed = required.find(name => checks[name] && !['success', 'queued', 'in_progress', 'requested', 'pending'].includes(checks[name]));
+    assert(!failed, `dev health failed: required check ${failed} concluded ${checks[failed]}`);
+    if (required.every(name => checks[name] === 'success')) break;
+    await new Promise(resolve => setTimeout(resolve, 15_000));
+  }
+  assert(required.every(name => checks?.[name] === 'success'), 'dev health timed out waiting for governance and scan checks');
   await output('dev_sha', dev.commit.sha);
 }
 /**
