@@ -1,5 +1,7 @@
 # Security Model
 
+Status: Milestone 0 baseline. ADR-014 and `.github/fynnestlady/architecture-policy.yml` supersede the Auth.js, AWS, EC2, and S3 implementation proposals below. Supabase Auth/PostgreSQL/Storage, Vercel, and the engineering bot require updated negative authorization, RLS, storage, CI-token, and deployment verification before release. See `docs/architecture/THREAT_MODEL.md` for the bot control plane.
+
 ## Objectives
 
 Protect customer data, commerce integrity, administrative authority, payment evidence, media, secrets, and release provenance. Security is a release requirement and uses deny-by-default, least privilege, defense in depth, auditable transitions, and minimal data collection.

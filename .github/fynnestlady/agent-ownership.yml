@@ -1,0 +1,102 @@
+# Specialist ownership contract. The engineering bot schedules work; specialists
+# implement or review only their assigned scope. Shared files need a named owner.
+version: 1
+orchestrator: FynnestladyEngineeringBot
+shared_files:
+  - package.json
+  - package-lock.json
+  - src/app/layout.tsx
+  - src/app/globals.css
+  - supabase/migrations/**
+  - .env.example
+  - .github/workflows/**
+handoff_fields: [issue, branch, commit, scope, dependencies, files, tests, blockers, next_owner]
+agents:
+  ArchitectAgent:
+    owns: [application architecture, integration contracts, dependency boundaries, architecture decisions]
+    files: [docs/architecture/**, src/lib/**, package.json, package-lock.json]
+    prohibits: [unreviewed product decisions, routine subsystem implementation, security approval of own changes]
+    inputs: [building memo, product requirements, approved stack]
+    outputs: [executable foundation, contracts, ADRs, architecture review]
+    verifies: [build, typecheck, architecture gate]
+    hands_off_to: [DesignAgent, DatabaseAgent, StorefrontAgent, TestingAgent]
+  ProductAgent:
+    owns: [business requirements, acceptance criteria, taxonomy, journeys, MVP priorities]
+    files: [docs/product/**, docs/brand/**]
+    prohibits: [invented product claims, backend schema implementation]
+    inputs: [building memo, owner decisions, verified catalogue]
+    outputs: [scoped issues, journey and acceptance contracts]
+    verifies: [acceptance traceability, content provenance]
+    hands_off_to: [DesignAgent, StorefrontAgent, CommerceAgent, TestingAgent]
+  DesignAgent:
+    owns: [visual system, interaction states, responsive and accessibility design]
+    files: [docs/design/**, src/styles/**, src/components/ui/**, src/app/globals.css, public/brand/**]
+    prohibits: [backend contracts, authorization decisions]
+    inputs: [brand assets, ProductAgent journeys, ArchitectAgent boundaries]
+    outputs: [tokens, component specifications, visual critique]
+    verifies: [320, 375, 390, 430, 768, 1024, 1440 pixel review, keyboard and reflow review]
+    hands_off_to: [StorefrontAgent, AdminAgent, TestingAgent]
+  StorefrontAgent:
+    owns: [customer pages, responsive shell, discovery and product presentation]
+    files: [src/app/(store)/**, src/components/storefront/**]
+    prohibits: [invented backend contracts, payment authority, schema mutation]
+    inputs: [ProductAgent acceptance criteria, DesignAgent specifications, CommerceAgent read models]
+    outputs: [customer interfaces, interaction evidence]
+    verifies: [responsive flows, accessibility, component tests]
+    hands_off_to: [DesignAgent, TestingAgent]
+  CommerceAgent:
+    owns: [catalogue, pricing, availability, cart, wishlist, checkout, orders]
+    files: [src/domain/commerce/**, src/server/commerce/**]
+    prohibits: [browser-authoritative prices or inventory, payment provider secrets, unreviewed migrations]
+    inputs: [DatabaseAgent contracts, ProductAgent rules, PaymentsAgent contract]
+    outputs: [server-authoritative commands and read models]
+    verifies: [money and stock invariants, state transitions, integration tests]
+    hands_off_to: [StorefrontAgent, PaymentsAgent, TestingAgent]
+  DatabaseAgent:
+    owns: [relational model, migrations, constraints, indexes, RLS data implications]
+    files: [supabase/**, docs/architecture/DATA_MODEL.md, docs/architecture/data-contracts/**]
+    prohibits: [unreviewed destructive production migration, UI implementation]
+    inputs: [domain invariants, SecurityAgent RLS matrix]
+    outputs: [migration, fixtures, schema contracts, recovery analysis]
+    verifies: [migration replay, constraint and negative RLS tests]
+    hands_off_to: [CommerceAgent, SecurityAgent, TestingAgent]
+  SecurityAgent:
+    owns: [auth, authorization, RLS review, secrets, webhook and automation security]
+    files: [docs/architecture/SECURITY_BASELINE.md, src/server/auth/**, tests/security/**]
+    prohibits: [self approval, weakening RLS or branch protection for a green gate]
+    inputs: [threat model, schema contract, environment boundaries]
+    outputs: [role matrix, auth plan, negative tests, review findings]
+    verifies: [cross-customer denial, admin denial, browser secret isolation]
+    hands_off_to: [DatabaseAgent, DevOpsAgent, TestingAgent]
+  PaymentsAgent:
+    owns: [Paystack initialization, verification, webhooks, reconciliation]
+    files: [src/server/payments/**, tests/payments/**]
+    prohibits: [live development charges, redirect-only success, browser secret exposure]
+    inputs: [order and payment contracts, SecurityAgent webhook requirements]
+    outputs: [idempotent payment integration]
+    verifies: [signature, amount, currency, duplicate and failure tests]
+    hands_off_to: [CommerceAgent, TestingAgent]
+  AdminAgent:
+    owns: [administration UI and operational workflows]
+    files: [src/app/(admin)/**, src/components/admin/**]
+    prohibits: [client-only authorization, direct browser service-role access]
+    inputs: [DesignAgent system, CommerceAgent commands, SecurityAgent role model]
+    outputs: [admin application]
+    verifies: [server authorization, operational and responsive flows]
+    hands_off_to: [SecurityAgent, TestingAgent]
+  DevOpsAgent:
+    owns: [CI, environments, previews, release health, rollback]
+    files: [.github/workflows/**, docs/runbooks/**, vercel.json]
+    prohibits: [production credentials in preview, protection bypass]
+    inputs: [architecture and security policy, test gates]
+    outputs: [delivery pipeline and health evidence]
+    verifies: [CI, preview isolation, rollback exercise]
+    hands_off_to: [SecurityAgent, TestingAgent]
+  TestingAgent:
+    owns: [independent acceptance, integration, accessibility and release verification]
+    files: [tests/**, e2e/**, docs/testing/**]
+    prohibits: [approving work it implemented, treating a build as full verification]
+    inputs: [acceptance criteria, specialist handoffs, exact commits]
+    outputs: [pass or reject verdict with reproducible evidence]
+    verifies: [positive and negative flows, browser widths, regression]
+    hands_off_to: [FynnestladyEngineeringBot]

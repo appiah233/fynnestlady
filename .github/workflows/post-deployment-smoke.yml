@@ -1,0 +1,37 @@
+name: Post deployment smoke
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      deployment_id:
+        description: GitHub deployment identifier
+        required: true
+        type: string
+permissions:
+  contents: read
+  deployments: read
+env:
+  FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
+  FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
+concurrency:
+  group: post-deployment-smoke-${{ github.event.deployment.id || inputs.deployment_id }}
+  cancel-in-progress: true
+jobs:
+  smoke:
+    if: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || (github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Run read-only production smoke
+        env:
+          BOT_DEPLOYMENT_ID: ${{ github.event.deployment.id || inputs.deployment_id }}
+          BOT_DEPLOYMENT_URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/bot.mjs post-deployment-smoke
+      - name: Incident signal
+        if: failure()
+        run: echo "::error::Production smoke failed. Inspect deployment and rollback eligibility." >> "$GITHUB_STEP_SUMMARY"

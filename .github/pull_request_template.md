@@ -45,4 +45,4 @@
 - [ ] I read `RULES.md`, the building memo, governance, architecture, and coordination records.
 - [ ] I did not include secrets or fabricated skincare/product information.
 - [ ] I recorded reproducible evidence and unresolved risks.
-- [ ] I understand only Eric Appiah Owusu may merge.
+- [ ] I understand the dedicated Engineering Bot may merge only after all required gates and branch protection pass; safety exceptions stop for owner decision.
