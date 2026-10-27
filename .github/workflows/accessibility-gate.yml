@@ -33,6 +33,18 @@ jobs:
           path: candidate
           fetch-depth: 0
           persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: candidate/.nvmrc
+          cache: npm
+          cache-dependency-path: candidate/package-lock.json
+      - name: Install candidate dependencies
+        working-directory: candidate
+        run: npm ci
+      - name: Install Playwright Chromium
+        working-directory: candidate
+        run: npx playwright install --with-deps chromium
       - name: Validate accessibility gate
         env:
           BOT_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
