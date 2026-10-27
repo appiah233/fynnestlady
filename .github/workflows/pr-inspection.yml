@@ -169,6 +169,7 @@ jobs:
           private-key: ${{ secrets.FYNNESTLADY_APP_PRIVATE_KEY }}
           permission-contents: read
           permission-pull-requests: write
+          permission-actions: write
 
       - name: Post one review per commit
         if: ${{ steps.app.outputs.token != '' }}
@@ -189,3 +190,20 @@ jobs:
             -f commit_id="$HEAD_SHA" -f event="$EVENT" -F body=@review.md || \
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
             -f commit_id="$HEAD_SHA" -f event="COMMENT" -F body=@review.md
+
+      - name: Dispatch protected merge controller after exact-head approval
+        if: ${{ steps.build.outputs.event == 'APPROVE' && steps.app.outputs.token != '' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          approvals=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews?per_page=100" --paginate \
+            --jq "[.[] | select(.user.login == \"$BOT_LOGIN\" and .commit_id == \"$HEAD_SHA\" and .state == \"APPROVED\")] | length" \
+            | awk '{ s += $1 } END { print s + 0 }')
+          if [ "$approvals" -lt 1 ]; then
+            echo "No Engineering Bot approval for current head $HEAD_SHA; merge dispatch withheld."
+            exit 1
+          fi
+          gh workflow run bot-merge-dev.yml --ref dev -f pr_number="$PR_NUMBER"
+          echo "Dispatched the protected merge controller for PR #$PR_NUMBER after exact-head approval."

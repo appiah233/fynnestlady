@@ -9,18 +9,16 @@ on:
         description: PR targeting dev
         required: true
         type: number
-  pull_request_review:
-    types: [submitted]
 permissions: {}
 env:
   FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
   FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
 concurrency:
-  group: bot-merge-dev-${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || inputs.pr_number || github.ref }}
+  group: bot-merge-dev-${{ github.event.workflow_run.head_sha || inputs.pr_number }}
   cancel-in-progress: false
 jobs:
   merge:
-    if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' && vars.FYNNESTLADY_USE_GITHUB_APP == 'true' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.path == '.github/workflows/evidence-publisher.yml' && github.event.workflow_run.head_repository.full_name == github.repository) || (github.event_name == 'pull_request_review' && github.event.review.state == 'approved' && github.event.review.user.login == 'fynnestlady-engineering-bot[bot]' && github.event.pull_request.base.ref == 'dev' && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' && vars.FYNNESTLADY_USE_GITHUB_APP == 'true' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.path == '.github/workflows/evidence-publisher.yml' && github.event.workflow_run.head_repository.full_name == github.repository)) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -41,24 +39,13 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
           INPUT_PR: ${{ inputs.pr_number }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         shell: bash
         run: |
           set -euo pipefail
           if [ "$EVENT_NAME" = "workflow_run" ]; then
             echo "run_id=$WORKFLOW_RUN_ID" >> "$GITHUB_OUTPUT"
           else
-            pr_number="$INPUT_PR"
-            sha="$PR_HEAD_SHA"
-            if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-              pr_number="$INPUT_PR"
-              sha="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr_number" --jq '.head.sha')"
-            else
-              pr_number="$PR_NUMBER"
-            fi
-            [[ "$pr_number" =~ ^[0-9]+$ ]]
-            [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+            sha="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$INPUT_PR" --jq '.head.sha')"
             run_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/evidence-publisher.yml/runs?head_sha=$sha&status=completed" --jq '.workflow_runs | map(select(.conclusion == "success")) | .[0].id')"
             [[ "$run_id" =~ ^[0-9]+$ ]]
             echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
@@ -96,7 +83,7 @@ jobs:
       - name: Verify all gates, evidence and current head
         env:
           BOT_PR_NUMBER: ${{ steps.pull.outputs.number }}
-          BOT_SOURCE_RUN_ID: ${{ steps.source_run.outputs.run_id }}
+          BOT_SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
           BOT_EVIDENCE_PATH: ${{ github.workspace }}/evidence/bot-evidence.json
           BOT_TARGET_DIR: ${{ github.workspace }}/candidate
           GITHUB_TOKEN: ${{ github.token }}
@@ -114,7 +101,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
           BOT_PR_NUMBER: ${{ steps.pull.outputs.number }}
-          BOT_SOURCE_RUN_ID: ${{ steps.source_run.outputs.run_id }}
+          BOT_SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
           BOT_EVIDENCE_PATH: ${{ github.workspace }}/evidence/bot-evidence.json
           BOT_TARGET_DIR: ${{ github.workspace }}/candidate
         run: node scripts/bot.mjs merge-dev
