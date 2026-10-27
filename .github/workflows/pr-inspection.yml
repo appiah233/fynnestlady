@@ -39,9 +39,10 @@ jobs:
         run: |
           set -euo pipefail
           BODY="$(cat inspection-summary.md)"
-          EVENT="COMMENT"
           if [ "$INSPECT_OUTCOME" = "success" ]; then
-            EVENT="APPROVE"
+            EVENT="COMMENT"
+          else
+            EVENT="REQUEST_CHANGES"
           fi
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
             -f commit_id="$COMMIT_SHA" \
