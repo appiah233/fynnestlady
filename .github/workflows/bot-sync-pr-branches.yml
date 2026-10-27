@@ -1,0 +1,44 @@
+name: Bot sync stale PR branches
+
+on:
+  pull_request:
+    branches: [dev]
+    types: [opened, reopened, synchronize, ready_for_review, edited]
+  push:
+    branches: [dev]
+
+permissions: {}
+
+concurrency:
+  group: bot-sync-pr-branches
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' && vars.FYNNESTLADY_USE_GITHUB_APP == 'true' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          persist-credentials: false
+      - name: Mint repository-scoped GitHub App token
+        id: app
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        with:
+          app-id: ${{ secrets.FYNNESTLADY_APP_ID }}
+          private-key: ${{ secrets.FYNNESTLADY_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+      - name: Merge dev into eligible stale feature branches
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+          FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
+          BOT_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/bot.mjs sync-pr-branches

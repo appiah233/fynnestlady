@@ -15,9 +15,13 @@ Neither branch accepts direct implementation commits, force pushes, or deletion.
 
 The bot opens and manages normal issues, branches, and PRs. It deletes merged work branches after post-merge verification. Every PR records task scope, tests, risk, rollback, and evidence. A release PR identifies exact `dev` SHA, included changes, migrations, security impact, risks, rollback, and evidence. On the first control-plane validation, stop before `main` merge or production deployment.
 
+When `FYNNESTLADY_BOT_ENABLED=true` and the GitHub App integration is enabled, the bot automatically merges the latest `dev` into an eligible same-repository work branch when GitHub reports the PR is behind. It checks PRs when opened or updated and after each push to `dev`. GitHub's resulting PR synchronize event reruns the normal CI and review workflows against the updated head. This applies only to non-draft PRs targeting `dev` from governed `feature/<issue>-...`, `fix/<issue>-...`, `security/<issue>-...`, or `chore/<issue>-...` branches. The bot uses the expected head SHA to avoid updating a branch that changed during the operation. If the merge conflicts, it leaves the branch untouched and comments with the reason; no force push or protection bypass is permitted. PRs targeting `main` are excluded so release PRs continue to identify an exact verified `dev` SHA.
+
 ## Merge eligibility
 
 The bot may merge only if the linked issue, specialist reviews, independent TestingAgent approval, architecture policy, format/lint/type/test/build, dependency/secret/security gates, applicable database/RLS and accessibility/Playwright checks, Preview, rollback instructions, and complete evidence all pass. The live protected branch must also permit the merge without bypass. Any missing or stale evidence blocks. The bot cannot approve its own code-owner review.
+
+When the Engineering Bot posts an approval for the exact current PR head and the evidence gate passes, the merge controller runs automatically. It merges only after rechecking that head, all required checks and independent reviews, linked issue, and live branch protection. An approval alone never skips a failed or pending gate, unresolved changes-requested review, code-owner requirement, or protection rule.
 
 The current protected branch requires code-owner approval by `@appiah233`. That requirement blocks automatic merges until an owner-approved governance change creates a valid independent approval path. The bot must report the block; it must not impersonate Eric, disable the rule, or use a bypass token.
 
