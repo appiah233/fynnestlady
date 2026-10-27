@@ -82,10 +82,15 @@ async function repairRecords(number, kind) {
  */
 function fileList() {
   const split = text => text ? text.split(/\r?\n/).filter(Boolean) : [];
+  const requestedBase = process.env.BOT_BASE_REF;
+  assert(!requestedBase || ['dev', 'main'].includes(requestedBase), 'BOT_BASE_REF must be dev or main');
   let baseRef = null;
-  for (const candidate of ['origin/dev', 'dev', 'HEAD^', 'HEAD']) {
+  const candidates = requestedBase
+    ? [`origin/${requestedBase}`, requestedBase]
+    : ['origin/dev', 'dev', 'HEAD^', 'HEAD'];
+  for (const candidate of candidates) {
     try {
-      baseRef = candidate === 'origin/dev' || candidate === 'dev'
+      baseRef = candidate.startsWith('origin/') || candidate === 'dev' || candidate === 'main'
         ? targetGit(['merge-base', candidate, 'HEAD'])
         : targetGit(['rev-parse', '--verify', candidate]);
       if (baseRef) break;
@@ -93,6 +98,7 @@ function fileList() {
       // try next ref
     }
   }
+  assert(baseRef || !requestedBase, `Cannot resolve candidate diff against ${requestedBase}`);
   const tracked = baseRef
     ? split(targetGit(['-c', 'core.quotepath=off', 'diff', '--name-only', '--no-renames', '--diff-filter=ACMR', baseRef]))
     : [];

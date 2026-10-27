@@ -16,6 +16,7 @@ permissions:
 env:
   FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
   FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
+  BOT_BASE_REF: main
 concurrency:
   group: production-gate-${{ github.event.pull_request.number || inputs.pr_number }}
   cancel-in-progress: true

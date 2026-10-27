@@ -34,6 +34,7 @@ jobs:
           persist-credentials: false
       - name: Enforce approved architecture
         env:
+          BOT_BASE_REF: ${{ github.event.pull_request.base.ref || 'dev' }}
           BOT_TARGET_DIR: ${{ github.workspace }}/candidate
           BOT_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
         run: |
