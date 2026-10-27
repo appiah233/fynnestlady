@@ -371,6 +371,7 @@ async function database() {
   if (paths.some(p => /(?:^|\/)(?:supabase|migrations)(?:\/|\b)|\.sql$/i.test(p))) {
     assert(existsSync(join(targetDir, 'supabase/config.toml')), 'Database change requires Supabase development configuration');
     assert(existsSync(join(targetDir, 'tests/database.test.mjs')), 'Database change requires executable database/RLS tests');
+    assert(process.env.DATABASE_TEST_URL && process.env.FYNNESTLADY_DATABASE_TEST_DISPOSABLE === '1', 'Database gate requires an explicitly disposable PostgreSQL test database');
     run('node', ['--test', 'tests/database.test.mjs'], { cwd: targetDir });
   }
   process.stdout.write('Database gate passed or not applicable\n');

@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "buildingMemo": "docs/governance/BUILDING_MEMO.md",
+  "integrationBranch": "dev",
+  "status": "proposed",
+  "issueCreation": "FynnestladyEngineeringBot assigns issue numbers and branches after ready checks; none claimed by this file",
+  "work": [
+    {
+      "id": "S2-AUTH",
+      "agent": "SecurityAgent",
+      "issue": null,
+      "branch": null,
+      "branchTemplate": "security/{issue}-authentication",
+      "scope": "Supabase Auth, sessions, recovery, server authorization",
+      "status": "queued",
+      "dependencies": ["S1-DATA", "S1-SEC", "S1-TEST"],
+      "filesOwned": ["src/server/auth/**", "src/app/(auth)/**", "tests/security/**"],
+      "tests": ["signup/login/logout/recovery", "cross-customer denial", "admin self-promotion denial", "browser secret isolation"],
+      "blockers": ["Disposable RLS gate pending", "Private admin lookup contract needs SecurityAgent approval"],
+      "handoff": "StorefrontAgent account UI; TestingAgent independent verification"
+    },
+    {
+      "id": "S2-CATALOGUE",
+      "agent": "CommerceAgent",
+      "issue": null,
+      "branch": null,
+      "branchTemplate": "feature/{issue}-catalogue",
+      "scope": "Published product/variant read model, price, availability, pagination",
+      "status": "queued",
+      "dependencies": ["S1-DATA", "S1-SEC", "S1-TEST"],
+      "filesOwned": ["src/domain/commerce/catalogue/**", "src/server/commerce/catalogue/**", "tests/commerce/**"],
+      "tests": ["draft isolation", "GHS integer prices", "unique SKU", "stock availability", "empty catalogue"],
+      "blockers": ["Disposable migration/RLS gate pending", "Real product publication needs human-verified catalogue and taxonomy"],
+      "handoff": "Document ProductReadModel for StorefrontAgent; TestingAgent verifies"
+    },
+    {
+      "id": "S2-STOREFRONT",
+      "agent": "StorefrontAgent",
+      "issue": null,
+      "branch": null,
+      "branchTemplate": "feature/{issue}-storefront-discovery",
+      "scope": "Home, Shop, concern discovery, product detail, About, guidance presentation",
+      "status": "active-external-agent",
+      "dependencies": ["S1-DESIGN", "S2-CATALOGUE"],
+      "filesOwned": ["src/app/(store)/**", "src/components/storefront/**"],
+      "tests": ["seven responsive widths", "keyboard and zoom", "single main landmark", "no fabricated content"],
+      "blockers": ["Another active agent is editing shared storefront files", "Populated views require verified catalogue and content"],
+      "handoff": "DesignAgent visual critique; TestingAgent independent browser verdict"
+    },
+    {
+      "id": "PHASE3-CART",
+      "agent": "CommerceAgent",
+      "issue": null,
+      "branch": null,
+      "branchTemplate": "feature/{issue}-cart",
+      "scope": "Variant purchase intent, server estimate, persistence contract",
+      "status": "blocked-by-dependency",
+      "dependencies": ["S2-CATALOGUE", "S2-AUTH"],
+      "filesOwned": ["src/domain/commerce/cart/**", "src/server/commerce/cart/**", "tests/commerce/cart/**"],
+      "tests": ["quantity aggregation", "forged-price rejection", "inactive/stock changes", "cross-customer denial"],
+      "blockers": ["Verified variant read model pending", "Owner decision required on guest-cart/guest-checkout policy"],
+      "handoff": "StorefrontAgent cart UI; TestingAgent verifies"
+    },
+    {
+      "id": "PHASE3-ACCOUNT",
+      "agent": "StorefrontAgent",
+      "issue": null,
+      "branch": null,
+      "branchTemplate": "feature/{issue}-customer-account",
+      "scope": "Customer profile, addresses, order history and status UI",
+      "status": "blocked-by-dependency",
+      "dependencies": ["S2-AUTH", "S1-DATA"],
+      "filesOwned": ["src/app/(account)/**", "src/components/account/**"],
+      "tests": ["cross-customer denial", "immutable order display", "responsive forms", "session expiry"],
+      "blockers": ["Order read contract pending", "Privacy and address-retention rules need owner input"],
+      "handoff": "SecurityAgent authorization review; TestingAgent independent verification"
+    }
+  ]
+}
+

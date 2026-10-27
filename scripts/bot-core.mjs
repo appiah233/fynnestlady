@@ -41,6 +41,7 @@ export function architectureViolations(paths = [], texts = []) {
     const path = String(paths[i]).replace(/\\/g, '/');
     const text = String(texts[i] ?? '');
     if (exempt.has(path)) continue;
+    if (/\.(?:avif|gif|ico|jpe?g|png|webp|woff2?|ttf|otf|pdf|mp4|webm)$/i.test(path)) continue;
     if (/\.(?:md|txt)$/i.test(path) && !/requirements\.txt$/i.test(path)) continue;
     for (const [pattern, reason] of FORBIDDEN) if (pattern.test(text)) violations.push(`${path}: ${reason}`);
   }

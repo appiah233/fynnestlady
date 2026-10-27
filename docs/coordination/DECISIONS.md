@@ -1,5 +1,9 @@
 # Decision Log
 
+## 2026-10-26 owner-directed implementation update
+
+The owner's active-development instruction and ADR-014 supersede the historical stack proposals in D-001 through D-004 and D-009: implementation uses Next.js 15, Supabase PostgreSQL/Auth/Storage, Vercel, Paystack, and GitHub with Playwright. The historical table below is retained for traceability. D-006 (Ghana delivery, tax, refund, privacy, and terms) and D-007 (verified catalogue and concern taxonomy) remain open before checkout or product publication. Existing `main` and `dev` branches supersede D-010's original bootstrap observation; protected branch and bot identity verification remain delivery gates.
+
 ## Pending Owner Decisions
 
 | ID | Decision | Recommendation | Required review |
