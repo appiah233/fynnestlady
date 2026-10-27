@@ -1,5 +1,9 @@
 # Decision Log
 
+## 2026-10-26 owner-directed implementation update
+
+The owner's active-development instruction and ADR-014 supersede the historical stack proposals in D-001 through D-004 and D-009: implementation uses Next.js 15, Supabase PostgreSQL/Auth/Storage, Vercel, Paystack, and GitHub with Playwright. The historical table below is retained for traceability. D-006 (Ghana delivery, tax, refund, privacy, and terms) and D-007 (verified catalogue and concern taxonomy) remain open before checkout or product publication. Existing `main` and `dev` branches supersede D-010's original bootstrap observation; protected branch and bot identity verification remain delivery gates.
+
 ## Pending Owner Decisions
 
 | ID | Decision | Recommendation | Required review |
@@ -13,5 +17,7 @@
 | D-007 | Concern taxonomy and catalogue claims | Derive only from verified real catalogue | Product/Design/Security |
 | D-008 | GitHub repository rules and secret scanning availability | Configure/verify manually after PR | Owner/Security |
 | D-009 | Initial availability architecture | Begin controlled single EC2; define scaling trigger | Architecture/Owner |
+| D-010 | Bootstrap and protect permanent `main` and `dev` branches | Owner establishes base branches, prevents force-push/deletion/direct changes, and configures required checks | Owner/Security |
+| D-011 | Configure `staging` and protected `production` environments | Require owner production approval and restrict deployment branches | Owner/Security/Architecture |
 
 No pending decision is accepted merely by being documented.

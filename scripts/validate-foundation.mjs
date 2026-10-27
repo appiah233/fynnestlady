@@ -6,6 +6,7 @@ const required = [
   "RULES.md",
   "docs/governance/BUILDING_MEMO.md",
   "docs/governance/PROJECT_GOVERNANCE.md",
+  "docs/governance/BRANCHING_AND_DELIVERY.md",
   "docs/brand/ABOUT_FYNNESTLADY.md",
   "docs/product/PRODUCT_VISION.md",
   "docs/architecture/ARCHITECTURE.md",
@@ -18,6 +19,7 @@ const required = [
   ".github/pull_request_template.md",
   ".github/workflows/foundation.yml",
   ".github/workflows/pr-inspection.yml",
+  ".github/workflows/secret-scan.yml",
 ];
 
 const failures = [];
@@ -27,12 +29,13 @@ for (const path of required) {
 
 function files(directory) {
   return readdirSync(directory).flatMap((name) => {
+    if ([".git", "node_modules", ".next", "coverage", "playwright-report", "test-results", ".npm-cache"].includes(name)) return [];
     const path = join(directory, name);
     return statSync(path).isDirectory() ? files(path) : [path];
   });
 }
 
-const textFiles = files(root).filter((path) => !path.includes(`${join(root, ".git")}`) && /\.(md|yml|yaml|json|mjs)$/.test(path));
+const textFiles = files(root).filter((path) => /\.(md|yml|yaml|json|mjs)$/.test(path));
 const forbidden = [
   [new RegExp(["pick", "sy"].join(""), "gi"), "legacy project reference"],
   [/AKIA[0-9A-Z]{16}/g, "possible AWS access key"],
@@ -64,6 +67,7 @@ if (/Verdict:\s*\*\*(?:APPROVED FOR MERGE|AUTO MERGE|MERGED)\*\*/.test(inspector
 const rules = existsSync(join(root, "RULES.md")) ? readFileSync(join(root, "RULES.md"), "utf8") : "";
 if (!rules.includes("Eric Appiah Owusu")) failures.push("RULES.md does not preserve owner authority");
 if (!rules.includes("server controls prices")) failures.push("RULES.md lacks server-authoritative pricing rule");
+if (!rules.includes("`main` is the production branch; `dev` is the integration branch")) failures.push("RULES.md lacks the permanent branch model");
 
 if (failures.length) {
   console.error(failures.join("\n"));

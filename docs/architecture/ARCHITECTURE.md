@@ -1,6 +1,6 @@
 # Architecture
 
-Status: **Proposed for Milestone 0 owner review.** See the building memo and ADRs before implementation.
+Status: **Historical Milestone 0 proposal, superseded for implementation by ADR-014 and `.github/fynnestlady/architecture-policy.yml` on 2026-10-26.** The owner-directed stack is Next.js 15, TypeScript, Tailwind CSS, shadcn/ui, Supabase PostgreSQL/Auth/Storage, Vercel, Paystack, GHS, Playwright, and WCAG 2.2 AA. The AWS, Prisma, Auth.js, and Next.js 16 text below remains as decision history and must not guide new implementation. See the building memo and ADR-014.
 
 ## Recommendation
 

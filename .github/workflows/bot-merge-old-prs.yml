@@ -1,0 +1,48 @@
+name: Bot merge safe old PRs
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Specific PR number to safely merge (leave blank to evaluate and merge all open PRs to dev)'
+        required: false
+        type: number
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: bot-merge-old-prs
+  cancel-in-progress: false
+
+jobs:
+  merge-safe:
+    if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out dev
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Mint GitHub App token
+        if: ${{ vars.FYNNESTLADY_USE_GITHUB_APP == 'true' }}
+        id: app
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        with:
+          app-id: ${{ secrets.FYNNESTLADY_APP_ID }}
+          private-key: ${{ secrets.FYNNESTLADY_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+
+      - name: Safely evaluate and merge eligible PRs
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          BOT_PR_NUMBER: ${{ inputs.pr_number }}
+          FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
+        run: node scripts/bot.mjs merge-old-pr
