@@ -1,0 +1,32 @@
+name: Dev health
+on:
+  push:
+    branches: [dev]
+  schedule:
+    - cron: '37 */6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
+  FYNNESTLADY_PRODUCTION_ENABLED: ${{ vars.FYNNESTLADY_PRODUCTION_ENABLED }}
+concurrency:
+  group: dev-health
+  cancel-in-progress: true
+jobs:
+  health:
+    if: ${{ vars.FYNNESTLADY_BOT_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          persist-credentials: false
+      - name: Check integrated dev
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/bot.mjs dev-health
+      - name: Incident signal
+        if: failure()
+        run: echo "::error::Dev health failed. Bot incident or safe revert must be evaluated." >> "$GITHUB_STEP_SUMMARY"

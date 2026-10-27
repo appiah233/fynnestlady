@@ -1,28 +1,32 @@
 # Branching and Delivery
 
+This delivery plan follows the building memo and ADR-014.
+
 ## Permanent Branches
 
-- `main`: production-quality, reviewed revisions only. Production release candidates originate only here.
-- `dev`: deployable integration branch and normal target for working-branch pull requests.
+- `main`: production revisions only.
+- `dev`: integration and development branch.
 
-Neither branch accepts direct implementation commits, force pushes, autonomous merges, or deletion. Eric Appiah Owusu is the sole merge authority.
+Neither branch accepts direct implementation commits, force pushes, or deletion. Protected checks and independent reviews apply to bot merges.
 
 ## Normal Flow
 
-`feature/fix/security/docs branch → PR to dev → owner-approved merge → integration/staging verification → release PR from dev to main → owner-approved merge → production candidate → owner deployment approval → production`
+`bot issue → feature/fix/security/chore branch from dev → PR to dev → independent evidence and required checks → bot squash merge → dev health verification → release PR from verified dev SHA to main → production gates → bot routine release merge → protected deployment → smoke verification`
 
-Every working branch records owner, task ID, scope, expected files, tests, coordination entry, and handoff. A release PR identifies exact `dev` SHA, included changes, migrations, security impact, risks, rollback, complete CI evidence, and unresolved owner decisions.
+The bot opens and manages normal issues, branches, and PRs. It deletes merged work branches after post-merge verification. Every PR records task scope, tests, risk, rollback, and evidence. A release PR identifies exact `dev` SHA, included changes, migrations, security impact, risks, rollback, and evidence. On the first control-plane validation, stop before `main` merge or production deployment.
 
-## CI
+When `FYNNESTLADY_BOT_ENABLED=true` and the GitHub App integration is enabled, the bot automatically merges the latest `dev` into an eligible same-repository work branch when GitHub reports the PR is behind. It checks PRs when opened or updated and after each push to `dev`. GitHub's resulting PR synchronize event reruns the normal CI and review workflows against the updated head. This applies only to non-draft PRs targeting `dev` from governed `feature/<issue>-...`, `fix/<issue>-...`, `security/<issue>-...`, or `chore/<issue>-...` branches. The bot uses the expected head SHA to avoid updating a branch that changed during the operation. If the merge conflicts, it leaves the branch untouched and comments with the reason; no force push or protection bypass is permitted. PRs targeting `main` are excluded so release PRs continue to identify an exact verified `dev` SHA.
 
-Pull requests to `dev` and `main` run checkout, toolchain validation, clean install, governance validation, lint, typecheck, unit/integration tests, production build, dependency review, CodeQL, secret scanning, and FynnestladyPRBot. Accessibility, schema, and migration validation activate where relevant. Mandatory failures fail closed.
+## Merge eligibility
 
-After an owner-approved merge to `dev`, repeat the full engineering/security suite. When staging exists, build one immutable artifact, deploy that exact artifact to protected staging, and record revision/SHA with health, smoke, E2E, and accessibility evidence.
+The bot may merge only if the linked issue, specialist reviews, independent TestingAgent approval, architecture policy, format/lint/type/test/build, dependency/secret/security gates, applicable database/RLS and accessibility/Playwright checks, Preview, rollback instructions, and complete evidence all pass. The live protected branch must also permit the merge without bypass. Any missing or stale evidence blocks. The bot cannot approve its own code-owner review.
 
-## Production
+When the Engineering Bot posts an approval for the exact current PR head and the evidence gate passes, the merge controller runs automatically. It merges only after rechecking that head, all required checks and independent reviews, linked issue, and live branch protection. An approval alone never skips a failed or pending gate, unresolved changes-requested review, code-owner requirement, or protection rule.
 
-Only an approved `main` revision may become a production candidate. Build an immutable artifact, pass full CI/security gates, and enter a protected GitHub `production` environment. Deployment requires Eric's explicit approval, then controlled migration/restart, health/smoke checks, and recorded evidence. A merge alone is not deployment authorization.
+The current protected branch requires code-owner approval by `@appiah233`. That requirement blocks automatic merges until an owner-approved governance change creates a valid independent approval path. The bot must report the block; it must not impersonate Eric, disable the rule, or use a bypass token.
 
-No pull-request workflow receives production secrets. Do not use the production EC2 application server as a general-purpose self-hosted runner. Future AWS deployment uses GitHub OIDC to a least-privilege IAM role rather than persistent access keys.
+## Production and exceptions
 
-Repository branch rules, environments, required reviewers, and required checks must be verified in GitHub; documents do not prove those settings are enabled.
+Routine production promotion is permitted only after release gates and a verified exact revision. The first bot validation performs no production release. Destructive production migration, unproven recovery, RLS weakening, provider replacement, confirmed credential/customer-data compromise, branch-protection change, unresolved critical security failure, or irreversible data operation requires Eric's decision. Protected environment requirements remain in force. Production secrets are unavailable to PR code and Gemini/Codex.
+
+Repository branch rules, environment rules, required reviewers, and required checks must be verified in GitHub; this document alone does not enable them.

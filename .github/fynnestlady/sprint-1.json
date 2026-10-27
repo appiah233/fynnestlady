@@ -1,0 +1,130 @@
+{
+  "sprint": 1,
+  "buildingMemo": "docs/governance/BUILDING_MEMO.md",
+  "integrationBranch": "dev",
+  "status": "active",
+  "work": [
+    {
+      "id": "S1-DESIGN",
+      "issue": 8,
+      "agent": "DesignAgent",
+      "branch": "feature/8-design-system",
+      "scope": [
+        "src/app/globals.css",
+        "src/components/ui/**",
+        "docs/design/**",
+        "public/brand/**"
+      ],
+      "status": "verification-pending",
+      "dependencies": [],
+      "tests": [
+        "contrast",
+        "responsive",
+        "keyboard",
+        "integrated build"
+      ],
+      "blockers": [
+        "Visual and keyboard review pending stable storefront shell"
+      ],
+      "handoff": "ArchitectAgent imports stylesheet; TestingAgent verifies"
+    },
+    {
+      "id": "S1-DATA",
+      "issue": 9,
+      "agent": "DatabaseAgent",
+      "branch": "feature/9-supabase-foundation",
+      "scope": [
+        "supabase/**",
+        "docs/architecture/SUPABASE_CONTRACTS.md",
+        "tests/database.test.mjs"
+      ],
+      "status": "verification-pending",
+      "dependencies": [],
+      "tests": [
+        "migration replay",
+        "constraints",
+        "negative RLS"
+      ],
+      "blockers": [
+        "Local PostgreSQL unavailable; disposable CI database gate has not run"
+      ],
+      "handoff": "SecurityAgent and TestingAgent verify RLS"
+    },
+    {
+      "id": "S1-ARCH",
+      "issue": 10,
+      "agent": "ArchitectAgent",
+      "branch": "feature/10-app-foundation",
+      "scope": [
+        "package.json",
+        "package-lock.json",
+        "src/app/layout.tsx",
+        "src/app/page.tsx",
+        "src/lib/**",
+        ".env.example"
+      ],
+      "status": "integration-active",
+      "dependencies": [],
+      "tests": [
+        "build",
+        "typecheck",
+        "architecture gate"
+      ],
+      "blockers": [
+        "Storefront files changing concurrently; integrated build pending"
+      ],
+      "handoff": "Integrate DesignAgent CSS and DatabaseAgent contracts"
+    },
+    {
+      "id": "S1-SEC",
+      "issue": 11,
+      "agent": "SecurityAgent",
+      "branch": "security/11-baseline",
+      "scope": [
+        "docs/architecture/SECURITY_BASELINE.md",
+        "tests/security/**"
+      ],
+      "status": "verification-pending",
+      "dependencies": [
+        "S1-DATA"
+      ],
+      "tests": [
+        "negative authorization",
+        "secret isolation"
+      ],
+      "blockers": [
+        "RLS live execution and runtime authorization pending"
+      ],
+      "handoff": "TestingAgent verifies after integration"
+    },
+    {
+      "id": "S1-TEST",
+      "issue": 12,
+      "agent": "TestingAgent",
+      "branch": "feature/12-testing-foundation",
+      "scope": [
+        "docs/testing/**",
+        "tests/e2e/**"
+      ],
+      "status": "active",
+      "dependencies": [
+        "S1-DESIGN",
+        "S1-DATA",
+        "S1-ARCH",
+        "S1-SEC"
+      ],
+      "tests": [
+        "independent acceptance"
+      ],
+      "blockers": [
+        "Playwright browser run and integrated build pending"
+      ],
+      "handoff": "Engineering Bot receives gate verdict"
+    }
+  ],
+  "next": [
+    "storefront",
+    "catalogue",
+    "authentication"
+  ]
+}
