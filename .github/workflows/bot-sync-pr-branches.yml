@@ -19,14 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: read
       pull-requests: write
       issues: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          ref: dev
-          persist-credentials: false
       - name: Mint repository-scoped GitHub App token
         id: app
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
@@ -36,9 +31,116 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
           permission-issues: write
-      - name: Merge dev into eligible stale feature branches
+      - name: Merge dev into eligible stale feature branches and report conflicts
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
-          FYNNESTLADY_BOT_ENABLED: ${{ vars.FYNNESTLADY_BOT_ENABLED }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
           BOT_PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: node scripts/bot.mjs sync-pr-branches
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+
+          const token = process.env.GITHUB_TOKEN;
+          const repository = process.env.GITHUB_REPOSITORY;
+          const apiBase = `https://api.github.com/repos/${repository}`;
+
+          async function api(path, method = 'GET', body) {
+            const response = await fetch(`${apiBase}/${path}`, {
+              method,
+              headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: 'application/vnd.github+json',
+                'X-GitHub-Api-Version': '2022-11-28',
+              },
+              body: body === undefined ? undefined : JSON.stringify(body),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              const error = new Error(`GitHub API ${method} ${path}: ${response.status} ${data.message || 'request failed'}`);
+              error.status = response.status;
+              throw error;
+            }
+            return data;
+          }
+
+          async function pullRequests() {
+            if (process.env.BOT_PR_NUMBER) return [await api(`pulls/${process.env.BOT_PR_NUMBER}`)];
+            const all = [];
+            for (let page = 1; ; page++) {
+              const batch = await api(`pulls?state=open&base=dev&per_page=100&page=${page}`);
+              all.push(...batch);
+              if (batch.length < 100) return all;
+            }
+          }
+
+          async function settledPull(number) {
+            let pr = await api(`pulls/${number}`);
+            for (let attempt = 0; attempt < 6 && (pr.mergeable === null || pr.mergeable_state === 'unknown'); attempt++) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              pr = await api(`pulls/${number}`);
+            }
+            return pr;
+          }
+
+          async function allComments(number) {
+            const comments = [];
+            for (let page = 1; ; page++) {
+              const batch = await api(`issues/${number}/comments?per_page=100&page=${page}`);
+              comments.push(...batch);
+              if (batch.length < 100) return comments;
+            }
+          }
+
+          const candidates = await pullRequests();
+          const eligible = candidates.filter(pr =>
+            pr.state === 'open' && !pr.draft && pr.base?.ref === 'dev' &&
+            pr.head?.repo?.full_name === repository &&
+            /^(?:feature|fix|security|chore)\/\d+-[a-z0-9][a-z0-9-]*$/i.test(pr.head.ref || '')
+          );
+          const synced = [];
+          const conflicts = [];
+          const failures = [];
+
+          for (let pr of eligible) {
+            pr = await settledPull(pr.number);
+            if (pr.mergeable_state !== 'behind') {
+              console.log(`PR #${pr.number}: no sync needed (${pr.mergeable_state || 'unknown'}).`);
+              continue;
+            }
+
+            const expectedHead = pr.head.sha;
+            try {
+              await api(`pulls/${pr.number}/update-branch`, 'PUT', { expected_head_sha: expectedHead });
+              synced.push(pr.number);
+              console.log(`PR #${pr.number}: merged latest dev into the feature branch; synchronize will rerun CI.`);
+            } catch (error) {
+              const latest = await settledPull(pr.number);
+              if (latest.head?.sha !== expectedHead) {
+                console.log(`PR #${pr.number}: head changed during the update; it will be re-evaluated on the next event.`);
+                continue;
+              }
+              if (latest.mergeable_state === 'dirty' || latest.mergeable === false) {
+                const marker = `<!-- fynnestlady-branch-sync-conflict:${expectedHead} -->`;
+                const comments = await allComments(pr.number);
+                if (!comments.some(comment => (comment.body || '').includes(marker))) {
+                  await api(`issues/${pr.number}/comments`, 'POST', {
+                    body: `${marker}\nThe bot could not merge the latest \`dev\` changes into this feature branch because GitHub reports merge conflicts. Resolve the conflicts on the branch; after it is updated, the normal CI checks will run again. The bot did not force-push or alter the branch.`,
+                  });
+                }
+                conflicts.push(pr.number);
+                console.log(`PR #${pr.number}: conflicts with dev; left an explanatory comment.`);
+              } else if (latest.mergeable_state !== 'behind') {
+                console.log(`PR #${pr.number}: sync no longer needed (${latest.mergeable_state || 'unknown'}).`);
+              } else {
+                failures.push(`PR #${pr.number}: ${error.message}`);
+              }
+            }
+          }
+
+          if (process.env.GITHUB_STEP_SUMMARY) {
+            appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+              `## Bot PR branch sync\n\n- Updated: ${synced.length ? synced.map(n => `#${n}`).join(', ') : 'none'}\n- Conflicts: ${conflicts.length ? conflicts.map(n => `#${n}`).join(', ') : 'none'}\n`);
+          }
+          if (failures.length) throw new Error(`Could not sync one or more stale PR branches: ${failures.join('; ')}`);
+          NODE

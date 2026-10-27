@@ -144,88 +144,6 @@ async function api(path, { method = 'GET', body, headers = {} } = {}) {
 }
 
 /**
- * Merges the latest `dev` commit into eligible bot work branches when their PR is behind.
- * GitHub's update-branch API creates a merge commit and its synchronize event starts the
- * normal CI workflows again. It never force-pushes or changes release PRs targeting main.
- * @param {object} e - GitHub event payload.
- */
-async function syncPrBranches(e) {
-  active();
-  const requested = prNumber(e);
-  let prs = [];
-  if (Number.isSafeInteger(requested) && requested > 0) {
-    prs = [await api(`pulls/${requested}`)];
-  } else {
-    for (let page = 1; ; page++) {
-      const batch = await api(`pulls?state=open&base=dev&per_page=100&page=${page}`);
-      prs.push(...batch);
-      if (batch.length < 100) break;
-    }
-  }
-
-  const eligible = prs.filter(pr =>
-    pr.state === 'open' && !pr.draft && pr.base?.ref === 'dev' &&
-    pr.head?.repo?.full_name === repository &&
-    /^(?:feature|fix|security|chore)\/\d+-[a-z0-9][a-z0-9-]*$/i.test(pr.head.ref || '')
-  );
-  const synced = [];
-  const conflicts = [];
-  const failures = [];
-
-  for (let pr of eligible) {
-    for (let attempt = 0; attempt < 6 && (pr.mergeable === null || pr.mergeable === undefined); attempt++) {
-      await new Promise(r => setTimeout(r, 2000));
-      pr = await api(`pulls/${pr.number}`);
-    }
-    if (pr.mergeable_state !== 'behind') {
-      process.stdout.write(`PR #${pr.number} sync not needed (mergeable state: ${pr.mergeable_state || 'unknown'})\n`);
-      continue;
-    }
-
-    const expectedHead = pr.head.sha;
-    try {
-      await api(`pulls/${pr.number}/update-branch`, {
-        method: 'PUT',
-        body: { expected_head_sha: expectedHead },
-      });
-      synced.push(pr.number);
-      process.stdout.write(`Merged latest dev into PR #${pr.number}; GitHub will rerun PR checks for the updated head\n`);
-    } catch (error) {
-      let latest = await api(`pulls/${pr.number}`);
-      for (let attempt = 0; attempt < 6 && latest.head?.sha === expectedHead &&
-        (latest.mergeable === null || latest.mergeable_state === 'unknown'); attempt++) {
-        await new Promise(r => setTimeout(r, 2000));
-        latest = await api(`pulls/${pr.number}`);
-      }
-      if (latest.head?.sha !== expectedHead) {
-        process.stdout.write(`PR #${pr.number} changed while sync was being attempted; re-evaluation will happen on the next event\n`);
-        continue;
-      }
-      if (latest.mergeable_state === 'dirty' || latest.mergeable === false) {
-        const marker = `<!-- fynnestlady-branch-sync-conflict:${expectedHead} -->`;
-        const comments = await api(`issues/${pr.number}/comments?per_page=100`);
-        if (!comments.some(comment => (comment.body || '').includes(marker))) {
-          await api(`issues/${pr.number}/comments`, {
-            method: 'POST',
-            body: { body: `${marker}\nThe bot could not merge the latest \`dev\` changes into this feature branch because GitHub reports merge conflicts. Resolve the conflicts on the branch; after it is updated, the normal CI checks will run again. The bot did not force-push or alter the branch.\n\nUpdate attempt: ${error.message}` },
-          });
-        }
-        conflicts.push(pr.number);
-        process.stdout.write(`PR #${pr.number} has conflicts with dev; left an explanatory comment\n`);
-      } else if (latest.mergeable_state !== 'behind') {
-        process.stdout.write(`PR #${pr.number} no longer needs syncing (mergeable state: ${latest.mergeable_state || 'unknown'})\n`);
-      } else {
-        failures.push(`PR #${pr.number}: ${error.message}`);
-      }
-    }
-  }
-
-  await output('synced_prs', synced.join(','));
-  await output('conflicted_prs', conflicts.join(','));
-  if (failures.length) throw new Error(`Could not sync one or more stale PR branches: ${failures.join('; ')}`);
-}
-
-/**
  * Fetches branch metadata from GitHub.
  * @param {string} name - Branch name.
  * @returns {Promise<object>} Branch metadata.
@@ -877,7 +795,7 @@ async function roleReview() {
   await writeFile(outFile, `${JSON.stringify(verdict, null, 2)}\n`);
 }
 
-const handlers = { intake, branch: createBranch, 'task-context': taskContext, 'open-pr': openPr, 'merge-dev': mergeDev, 'sync-pr-branches': syncPrBranches, policy: checkPolicy, quality, security, database, accessibility, evidence: evidenceGate, remediate, 'dev-health': devHealth, release, 'production-gate': productionGate, 'post-deployment-smoke': smoke, rollback, dependency, 'publish-patch': publishPatch, 'role-review': roleReview, 'free-implement': freeImplement, 'free-remediate': freeRemediate, 'merge-old-pr': mergeOldPr };
+const handlers = { intake, branch: createBranch, 'task-context': taskContext, 'open-pr': openPr, 'merge-dev': mergeDev, policy: checkPolicy, quality, security, database, accessibility, evidence: evidenceGate, remediate, 'dev-health': devHealth, release, 'production-gate': productionGate, 'post-deployment-smoke': smoke, rollback, dependency, 'publish-patch': publishPatch, 'role-review': roleReview, 'free-implement': freeImplement, 'free-remediate': freeRemediate, 'merge-old-pr': mergeOldPr };
 try {
   assert(command in handlers, `Unknown bot command: ${command}`);
   await handlers[command](await event());
