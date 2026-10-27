@@ -19,7 +19,9 @@ function required(value, name) { if (!value) throw new Error(`${name} is require
 function changedFiles() {
   if (process.env.BOT_CHANGED_FILES) return JSON.parse(process.env.BOT_CHANGED_FILES);
   const target = required(process.env.BOT_TARGET_DIR, 'BOT_TARGET_DIR');
-  return execFileSync('git', ['diff', '--name-only', 'origin/dev...HEAD'], { cwd: target, encoding: 'utf8' }).split(/\r?\n/).filter(Boolean);
+  const base = process.env.BOT_BASE_REF || 'dev';
+  if (!['dev', 'main'].includes(base)) throw new Error('BOT_BASE_REF must be dev or main');
+  return execFileSync('git', ['diff', '--name-only', `origin/${base}...HEAD`], { cwd: target, encoding: 'utf8' }).split(/\r?\n/).filter(Boolean);
 }
 try {
   if (process.argv[2] !== 'assemble') throw new Error('Expected assemble command');

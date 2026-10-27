@@ -12,6 +12,8 @@ on:
 permissions:
   contents: read
   pull-requests: read
+env:
+  BOT_BASE_REF: ${{ github.event.pull_request.base.ref || 'dev' }}
 concurrency:
   group: accessibility-gate-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
   cancel-in-progress: true

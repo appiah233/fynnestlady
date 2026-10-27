@@ -36,7 +36,9 @@ const hasLinkedIssue =
   /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?|issue)\s+#(\d+)/i.test(body);
 
 function getChangedFiles() {
-  for (const base of ["origin/dev", "dev", "HEAD^"]) {
+  const requestedBase = ["dev", "main"].includes(pr.base?.ref) ? pr.base.ref : null;
+  const bases = requestedBase ? [`origin/${requestedBase}`, requestedBase] : ["origin/dev", "dev", "HEAD^"];
+  for (const base of bases) {
     try {
       const mergeBase = execFileSync("git", ["merge-base", base, "HEAD"], {
         cwd: root,
@@ -63,6 +65,7 @@ function getChangedFiles() {
       // try next base candidate
     }
   }
+  if (requestedBase) throw new Error(`Cannot resolve candidate diff against ${requestedBase}`);
   return [];
 }
 
