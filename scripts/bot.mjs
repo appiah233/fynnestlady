@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { architectureViolations, branchForIssue, canMergeDev, nextRetry, requiredReviews, validateEvidence } from './bot-core.mjs';
+import { architectureViolations, branchForIssue, canMergeDev, nextRetry, platformSafetyViolations, requiredReviews, validateEvidence } from './bot-core.mjs';
 
 const command = process.argv[2];
 const repository = process.env.GITHUB_REPOSITORY || 'appiah233/fynnestlady';
@@ -342,7 +342,7 @@ async function mergeDev(e) {
 async function checkPolicy() {
   const paths = fileList();
   const texts = await Promise.all(paths.map(async p => existsSync(join(targetDir, p)) ? readFile(join(targetDir, p), 'utf8').catch(() => '') : ''));
-  const violations = architectureViolations(paths, texts);
+  const violations = platformSafetyViolations(paths, texts);
   assert(violations.length === 0, `Architecture policy violations:\n${violations.join('\n')}`);
   process.stdout.write(`Architecture policy passed for ${paths.length} changed files\n`);
 }
@@ -630,7 +630,7 @@ async function roleReview() {
   const deterministicFindings = [];
   if (role === 'ArchitectAgent') {
     const texts = await Promise.all(paths.map(async p => existsSync(join(targetDir, p)) ? readFile(join(targetDir, p), 'utf8').catch(() => '') : ''));
-    deterministicFindings.push(...architectureViolations(paths, texts));
+    deterministicFindings.push(...platformSafetyViolations(paths, texts));
   } else if (role === 'SecurityAgent') {
     try { run('node', [join(controlDir, 'scan-secrets.mjs')], { cwd: targetDir }); }
     catch (err) { deterministicFindings.push(`Secret scan failed: ${err.message}`); }

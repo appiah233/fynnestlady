@@ -5,6 +5,7 @@ import {
   branchForIssue,
   canMergeDev,
   nextRetry,
+  platformSafetyViolations,
   REQUIRED_CHECKS,
   requiredReviews,
   validateEvidence,
@@ -160,4 +161,60 @@ test('retry controller caps attempts and rejects a repeated unsuccessful fix', (
     { signature: 'fix-B' },
     { signature: 'fix-C' },
   ], 'fix-D').allowed, false);
+});
+
+test('platform safety guard blocks destructive SQL, Supabase Auth, client secret leaks, unsafe XSS, and RULES.md tampering', () => {
+  assert.notEqual(
+    platformSafetyViolations(
+      ['supabase/migrations/20261028000000_bad.sql'],
+      ['DROP TABLE public.products;']
+    ).length,
+    0,
+    'destructive DROP TABLE in migrations must be blocked'
+  );
+  assert.notEqual(
+    platformSafetyViolations(
+      ['supabase/migrations/20261028000000_bad_rls.sql'],
+      ['ALTER TABLE public.orders DISABLE ROW LEVEL SECURITY;']
+    ).length,
+    0,
+    'disabling RLS in migrations must be blocked'
+  );
+  assert.notEqual(
+    platformSafetyViolations(
+      ['src/components/login.tsx'],
+      ['"use client";\nsupabase.auth.signInWithPassword({ email, password });']
+    ).length,
+    0,
+    'Supabase Auth usage must be blocked under Clerk-only policy'
+  );
+  assert.notEqual(
+    platformSafetyViolations(
+      ['src/components/bad-client.tsx'],
+      ['"use client";\nconst key = process.env.CLERK_SECRET_KEY;']
+    ).length,
+    0,
+    'client reference to server secret must be blocked'
+  );
+  assert.notEqual(
+    platformSafetyViolations(
+      ['src/components/xss.tsx'],
+      ['export const X = () => <div dangerouslySetInnerHTML={{ __html: raw }} />;']
+    ).length,
+    0,
+    'dangerouslySetInnerHTML must be blocked'
+  );
+  assert.notEqual(
+    platformSafetyViolations(['.env.production'], ['KEY=val']).length,
+    0,
+    'tracked .env files must be blocked'
+  );
+  assert.notEqual(
+    platformSafetyViolations(['RULES.md'], ['# Weakened rules without owner']).length,
+    0,
+    'RULES.md tampering must be blocked'
+  );
+  const blockedReview = mergeInput();
+  blockedReview.pr.reviews = [{ state: 'CHANGES_REQUESTED' }];
+  assert.equal(canMergeDev(blockedReview).ok, false);
 });
