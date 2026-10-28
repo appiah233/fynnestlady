@@ -12,7 +12,8 @@ export function Header() {
   const clerkReady = isClerkConfigured();
 
   return (
-    <header className="border-b border-[var(--border)] bg-[var(--surface)]">
+    <header className="site-header border-b border-[var(--border)] bg-[var(--surface)]">
+      <div className="site-announcement">Skincare delivered across Ghana</div>
       <div className="container-page flex flex-wrap items-center justify-between gap-3 py-3">
         <Link
           className="inline-flex min-h-11 items-center gap-3 no-underline"

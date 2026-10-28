@@ -106,3 +106,17 @@ Risks: Production gate remains disabled, so its updated issue parser cannot be e
 Blockers: Required CI and independent owner review of the follow-up PR.
 Next owner: Eric Appiah Owusu for review; Engineering Bot for eligible protected dev merge.
 Next action: Open follow-up PR, inspect its gates, then update release PR #47 after integration.
+
+## 2026-10-28T15:48:00Z Codex — issue #53 reference-led home page
+
+Task ID: REFERENCE-HOMEPAGE / issue #53
+Branch: feature/53-reference-homepage
+Role: DesignAgent perspective and storefront implementation
+Completed: Reworked the home page hierarchy around an original editorial hero, two campaign panels, and the existing verified product catalogue. Added category links into the existing shop filter and a delivery announcement. Kept products, names, prices, stock status, and concern guidance sourced from existing code.
+Evidence: Owner-supplied reference; generated images inspected before use; source diff and catalogue category inspected.
+Tests: Not run; the owner requested design implementation, not verification. CI and independent design/acceptance review remain for the PR.
+Risks: Editorial photography is generated and must not be interpreted as product imagery or an efficacy claim. The design needs mobile, desktop, keyboard, and zoom review before merge.
+Blockers: Required CI and independent review.
+Decisions required: None for this bounded visual update.
+Next owner: Eric Appiah Owusu for design direction; independent reviewer for PR acceptance.
+Next action: Review the PR preview and required checks; merge to dev only through protected governance.

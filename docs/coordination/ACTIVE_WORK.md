@@ -1,5 +1,19 @@
 # Active Work
 
+## 2026-10-28T15:42:00Z Codex — REFERENCE-HOMEPAGE
+
+Task ID: REFERENCE-HOMEPAGE / issue #53
+Branch: feature/53-reference-homepage
+Role: DesignAgent perspective and storefront implementation
+Objective: Adapt the supplied beauty storefront reference into the Fynnestlady home page.
+Business outcome: Give shoppers a clear, image-led path from brand introduction to verified products, following the Building Memo.
+Scope: Home page hero, two campaign panels, featured product hierarchy, supporting responsive styles, and original campaign photography.
+Non-goals: New product claims, invented catalogue items, checkout changes, or production deployment.
+Files expected: src/app/page.tsx, src/components/sections/hero.tsx, src/components/sections/featured-products.tsx, src/components/sections/campaign-tiles.tsx, src/app/globals.css, public/images/campaign-*.png, coordination records.
+Dependencies: Existing verified catalogue, existing shop filters, owner-supplied visual reference.
+Conflicts checked: Clean dev checkout and current origin/dev; no concurrent local changes.
+Status: In progress. Design review: keep live text accessible, use original editorial imagery, preserve brand palette and verified product names/prices, maintain mobile reading order and 44px actions.
+
 ## 2026-10-28T14:24:57Z Codex
 
 Task ID: PR-47-NO-GEMINI-EVIDENCE

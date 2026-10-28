@@ -1,4 +1,5 @@
 import { HeroSection } from "@/components/sections/hero";
+import { CampaignTiles } from "@/components/sections/campaign-tiles";
 import { ConcernGrid } from "@/components/sections/concern-grid";
 import { FeaturedProducts } from "@/components/sections/featured-products";
 import { BrandExperience } from "@/components/sections/brand-experience";
@@ -12,8 +13,9 @@ export default function HomePage() {
   return (
     <div>
       <HeroSection />
-      <ConcernGrid />
+      <CampaignTiles />
       <FeaturedProducts />
+      <ConcernGrid />
       <BrandExperience />
       <DiscoverySection />
       <WhyFynnestlady />
