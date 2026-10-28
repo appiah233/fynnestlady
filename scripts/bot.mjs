@@ -150,6 +150,22 @@ async function api(path, { method = 'GET', body, headers = {} } = {}) {
 }
 
 /**
+ * Reads every page of a GitHub REST list so later reviews and files cannot be omitted.
+ * @param {string} path - Repository-relative list endpoint without pagination parameters.
+ * @returns {Promise<object[]>} All list entries.
+ */
+async function apiPages(path) {
+  const entries = [];
+  const separator = path.includes('?') ? '&' : '?';
+  for (let page = 1; ; page++) {
+    const batch = await api(`${path}${separator}per_page=100&page=${page}`);
+    assert(Array.isArray(batch), `GitHub API ${path} did not return a list`);
+    entries.push(...batch);
+    if (batch.length < 100) return entries;
+  }
+}
+
+/**
  * Fetches branch metadata from GitHub.
  * @param {string} name - Branch name.
  * @returns {Promise<object>} Branch metadata.
@@ -336,17 +352,24 @@ async function mergeDev(e) {
   const evidence = await loadEvidence();
   const issue = await api(`issues/${evidence.issue}`);
   assert(issue.state === 'open' && !issue.pull_request, 'Linked issue does not exist as an open issue');
-  const files = await api(`pulls/${number}/files?per_page=100`);
+  const files = await apiPages(`pulls/${number}/files`);
   const roles = requiredReviews(files.map(f => f.filename));
   let checks = await checksFor(pr.head.sha);
   for (let i = 0; i < 6 && checks['Bot final review'] !== 'success'; i++) {
     await new Promise(r => setTimeout(r, 5000));
     checks = await checksFor(pr.head.sha);
   }
-  const rawReviews = await api(`pulls/${number}/reviews?per_page=100`);
+  const rawReviews = await apiPages(`pulls/${number}/reviews`);
   const botLogin = `${process.env.FYNNESTLADY_APP_SLUG || 'fynnestlady-engineering-bot'}[bot]`;
   const trustedAssociations = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
-  const independentApproval = rawReviews.some(review =>
+  const latestDecisions = new Map();
+  for (const review of [...rawReviews].sort((a, b) =>
+    String(a.submitted_at || '').localeCompare(String(b.submitted_at || '')) || Number(a.id) - Number(b.id))) {
+    if (['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(review.state) && review.user?.login) {
+      latestDecisions.set(review.user.login, review);
+    }
+  }
+  const independentApproval = [...latestDecisions.values()].some(review =>
     review.user?.type !== 'Bot' &&
     review.user?.login !== botLogin &&
     review.user?.login !== pr.user?.login &&
