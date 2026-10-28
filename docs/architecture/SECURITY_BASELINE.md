@@ -16,7 +16,7 @@ This plan follows the [building memo](../governance/BUILDING_MEMO.md) and the ow
 
 ## Role and RLS matrix
 
-`anon` means no authenticated customer session. `customer` means an authenticated Supabase user. `admin` means an authenticated user with a valid server-checked membership in the private admin table; a browser claim or hidden link is insufficient. `service_role` is a server-only system capability, never a customer role.
+`anon` means no authenticated customer session. `customer` means a Clerk user whose session token Supabase has verified through its Clerk third-party integration. `admin` means an authenticated user with a valid server-checked membership in the private admin table; a browser claim or hidden link is insufficient. `service_role` is a server-only system capability, never a customer role.
 
 | Resource | anon | customer | admin | service role |
 |---|---|---|---|---|
@@ -31,7 +31,7 @@ All exposed tables must explicitly enable RLS. The first migration uses `public.
 
 ## Authentication and administration contract
 
-- Use Supabase Auth for signup, login, logout, recovery, and session refresh. Server operations resolve the user through a verified Supabase session; they do not trust a submitted user ID, email, role, or unverified JWT payload.
+- Use Clerk for signup, login, logout, recovery, and session refresh. Configure Supabase's Clerk third-party auth integration and pass the Clerk session token for customer queries. RLS compares the verified token subject with `clerk_user_id`; server operations never trust a submitted user ID, email, role, or unverified JWT payload.
 - Return generic recovery results to avoid account enumeration. Rate-limit login, signup, recovery, checkout, and admin endpoints with a shared backing store before production.
 - Session cookies must be Secure in HTTPS, HttpOnly where the SDK supports it, and configured for suitable SameSite and path scope. Evaluate CSRF on every cookie-authenticated mutation; use same-origin checks and explicit tokens when needed.
 - Put admin membership in a private schema with no browser grants. The first administrator is provisioned through an audited server-side procedure. Customers cannot assign or change this membership.

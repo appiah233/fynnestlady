@@ -1,9 +1,13 @@
 "use client";
 
-import { createBrowserClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 import { publicSupabaseConfig } from "@/lib/env";
 
-export function createSupabaseBrowserClient() {
+/** Pass Clerk's session.getToken callback from a component using useSession(). */
+export function createSupabaseBrowserClient(getToken: () => Promise<string | null>) {
   const { url, publishableKey } = publicSupabaseConfig();
-  return createBrowserClient(url, publishableKey);
+  return createClient(url, publishableKey, {
+    accessToken: getToken,
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }

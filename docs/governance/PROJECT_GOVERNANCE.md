@@ -17,6 +17,8 @@ Eric Appiah Owusu owns product decisions and exception risk acceptance. His 2026
 
 One agent may document multiple perspectives during foundation work, but must record each role's analysis and cannot waive required independent review for implementation or release.
 
+Following the 2026-10-28 owner amendment to ADR-014, CI role reports without Gemini are automated deterministic checks. They are labelled by source and do not substitute for independent human approval of a merge.
+
 ## Development Workflow
 
 1. Confirm business outcome and definition of ready.

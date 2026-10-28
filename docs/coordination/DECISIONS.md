@@ -1,5 +1,10 @@
 # Decision Log
 
+## 2026-10-28 owner decision: evidence without Gemini API
+
+Eric confirmed no Gemini API key is available and directed removal of that dependency from the evidence gate for PR #47. Automated role reports are deterministic, identified as such in the evidence manifest, and remain tied to the exact head SHA. Independent human approval, all required checks, protected branches, and the initial production hold remain in force. The controller update is tracked in issue #49 and PR #50. Any one-time merge exception needed to install the new trusted controller requires a separate explicit owner decision; this decision does not authorize bypassing a failing required check.
+
+
 ## 2026-10-26 owner-directed implementation update
 
 The owner's active-development instruction and ADR-014 supersede the historical stack proposals in D-001 through D-004 and D-009: implementation uses Next.js 15, Supabase PostgreSQL/Auth/Storage, Vercel, Paystack, and GitHub with Playwright. The historical table below is retained for traceability. D-006 (Ghana delivery, tax, refund, privacy, and terms) and D-007 (verified catalogue and concern taxonomy) remain open before checkout or product publication. Existing `main` and `dev` branches supersede D-010's original bootstrap observation; protected branch and bot identity verification remain delivery gates.

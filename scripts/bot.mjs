@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { architectureViolations, branchForIssue, canMergeDev, canMergeOldPr, latestReviewStates, nextRetry, platformSafetyViolations, requiredReviews, validateEvidence } from './bot-core.mjs';
+import { architectureViolations, branchForIssue, canMergeDev, latestReviewStates, nextRetry, platformSafetyViolations, requiredReviews, validateEvidence } from './bot-core.mjs';
 
 const command = process.argv[2];
 const repository = process.env.GITHUB_REPOSITORY || 'appiah233/fynnestlady';
@@ -147,6 +147,22 @@ async function api(path, { method = 'GET', body, headers = {} } = {}) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(`GitHub API ${method} ${path}: ${response.status} ${String(data.message || 'request failed')}`);
   return data;
+}
+
+/**
+ * Reads every page of a GitHub REST list so later reviews and files cannot be omitted.
+ * @param {string} path - Repository-relative list endpoint without pagination parameters.
+ * @returns {Promise<object[]>} All list entries.
+ */
+async function apiPages(path) {
+  const entries = [];
+  const separator = path.includes('?') ? '&' : '?';
+  for (let page = 1; ; page++) {
+    const batch = await api(`${path}${separator}per_page=100&page=${page}`);
+    assert(Array.isArray(batch), `GitHub API ${path} did not return a list`);
+    entries.push(...batch);
+    if (batch.length < 100) return entries;
+  }
 }
 
 /**
@@ -336,19 +352,38 @@ async function mergeDev(e) {
   const evidence = await loadEvidence();
   const issue = await api(`issues/${evidence.issue}`);
   assert(issue.state === 'open' && !issue.pull_request, 'Linked issue does not exist as an open issue');
-  const files = await api(`pulls/${number}/files?per_page=100`);
+  const files = await apiPages(`pulls/${number}/files`);
   const roles = requiredReviews(files.map(f => f.filename));
-  const checks = await checksFor(pr.head.sha);
-  const rawReviews = await api(`pulls/${number}/reviews?per_page=100`);
+  let checks = await checksFor(pr.head.sha);
+  for (let i = 0; i < 6 && checks['Bot final review'] !== 'success'; i++) {
+    await new Promise(r => setTimeout(r, 5000));
+    checks = await checksFor(pr.head.sha);
+  }
+  const rawReviews = await apiPages(`pulls/${number}/reviews`);
   const botLogin = `${process.env.FYNNESTLADY_APP_SLUG || 'fynnestlady-engineering-bot'}[bot]`;
-  const approvedHead = rawReviews.some(review => review.user?.login === botLogin && review.commit_id === pr.head.sha && review.state === 'APPROVED');
-  if (!approvedHead) {
-    process.stdout.write(`Merge deferred for PR #${number}: waiting for the Engineering Bot to approve current head ${pr.head.sha}\n`);
-    await output('merge_deferred', 'awaiting-bot-approval');
+  const trustedAssociations = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+  const latestDecisions = new Map();
+  for (const review of [...rawReviews].sort((a, b) =>
+    String(a.submitted_at || '').localeCompare(String(b.submitted_at || '')) || Number(a.id) - Number(b.id))) {
+    if (['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(review.state) && review.user?.login) {
+      latestDecisions.set(review.user.login, review);
+    }
+  }
+  const independentApproval = [...latestDecisions.values()].some(review =>
+    review.user?.type !== 'Bot' &&
+    review.user?.login !== botLogin &&
+    review.user?.login !== pr.user?.login &&
+    trustedAssociations.has(review.author_association) &&
+    review.commit_id === pr.head.sha &&
+    review.state === 'APPROVED');
+  if (checks['Bot final review'] !== 'success' || !independentApproval) {
+    process.stdout.write(`Merge deferred for PR #${number}: final review check and independent approval are required for ${pr.head.sha}\n`);
+    await output('merge_deferred', 'awaiting-independent-review');
     return;
   }
-  // A standing "changes requested" review (including the bot's own) must block the merge.
-  pr.reviews = latestReviewStates(rawReviews);
+  // The exact-head final-review check is authoritative for the App's verdict.
+  // Human change requests remain blocking until their reviewer clears them.
+  pr.reviews = latestReviewStates(rawReviews.filter(review => review.user?.login !== botLogin));
   const verdict = canMergeDev({ pr, checks, evidence, requiredReviews: roles, killSwitch: !enabled });
   assert(verdict.ok, `Merge blocked: ${verdict.reasons.join('; ')}`);
   assert(pr.mergeable === true, 'GitHub has not established mergeability');
@@ -380,84 +415,6 @@ async function closeIssueAfterMerge(issueNumber, pullRequestNumber) {
   });
 }
 
-/**
- * Evaluates and safely merges older PRs targeting `dev` if and only if
- * they do not harm current application status, foundation contracts, or stability.
- * @param {object} e - GitHub event payload.
- */
-async function mergeOldPr(e) {
-  active();
-  const prNum = prNumber(e);
-  const prsToEvaluate = [];
-  if (Number.isSafeInteger(prNum) && prNum > 0) {
-    prsToEvaluate.push(await api(`pulls/${prNum}`));
-  } else {
-    const openPulls = await api('pulls?state=open&base=dev&per_page=100');
-    prsToEvaluate.push(...openPulls);
-  }
-
-  const mergedList = [];
-  for (let pr of prsToEvaluate) {
-    const number = pr.number;
-    pr = await api(`pulls/${number}`);
-    for (let i = 0; i < 6 && (pr.mergeable === null || pr.mergeable === undefined); i++) {
-      await new Promise(r => setTimeout(r, 2000));
-      pr = await api(`pulls/${number}`);
-    }
-    const files = await api(`pulls/${number}/files?per_page=100`);
-    const fileContents = files.map(f => f.patch || '');
-    const checks = await checksFor(pr.head.sha);
-    const rawReviews = await api(`pulls/${number}/reviews?per_page=100`);
-    pr.reviews = latestReviewStates(rawReviews);
-
-    const verdict = canMergeOldPr({
-      pr,
-      files,
-      fileContents,
-      checks,
-      killSwitch: !enabled,
-    });
-
-    if (!verdict.ok) {
-      process.stdout.write(`PR #${number} cannot be safely merged: ${verdict.reasons.join('; ')}\n`);
-      const commentBody = [
-        `## ⚠️ Fynnestlady Engineering Bot: Merge Safety Evaluation`,
-        '',
-        `Cannot safely auto-merge **PR #${number}** because it may harm current application status or violate safety rules:`,
-        '',
-        ...verdict.reasons.map(r => `- ${r}`),
-        '',
-        `*Please resolve these issues or update the branch before this PR can be merged.*`,
-      ].join('\n');
-      await api(`issues/${number}/comments`, { method: 'POST', body: { body: commentBody } });
-      continue;
-    }
-
-    // Merge safely
-    try {
-      await api(`pulls/${number}/merge`, {
-      method: 'PUT',
-      body: {
-        merge_method: 'squash',
-        sha: pr.head.sha,
-        commit_title: `${pr.title} (#${number})`,
-        commit_message: `Safely merged by Fynnestlady Engineering Bot after verifying no harm to current application status.`,
-      },
-    });
-    const merged = await api(`pulls/${number}`);
-    if (merged.merged) {
-      process.stdout.write(`PR #${number} successfully merged into dev\n`);
-      const successComment = `Merged by **Fynnestlady Engineering Bot** after verifying that candidate changes do not harm current application status, retain all foundation contracts, and pass platform safety.`;
-      await api(`issues/${number}/comments`, { method: 'POST', body: { body: successComment } });
-      await api(`git/refs/heads/${pr.head.ref}`, { method: 'DELETE' }).catch(() => {});
-      mergedList.push(number);
-    }
-    } catch (err) {
-      process.stdout.write(`Failed to merge PR #${number}: ${err.message}\n`);
-    }
-  }
-  await output('merged_prs', mergedList.join(','));
-}
 /**
  * Validates candidate files against the architecture policy.
  */
@@ -855,13 +812,8 @@ async function freeImplement() {
   const userPrompt = await readFile(taskFile, 'utf8').catch(() => 'Implement foundation task');
   const modelReply = await freeModelCall(systemPrompt, userPrompt);
   const applied = await applyJsonFileOps(modelReply);
-  if (!applied) {
-    const adrDir = join(targetDir, 'docs', 'architecture', 'ADR');
-    await mkdir(adrDir, { recursive: true });
-    const statusPath = join(targetDir, 'docs', 'coordination', 'BOT_FOUNDATION_STATUS.md');
-    await writeFile(statusPath, `# Bot Foundation Status\n\nVerified Approved Stack: Next.js 15, TypeScript, Tailwind CSS, shadcn/ui, Supabase PostgreSQL/Auth/Storage, Vercel, Paystack (GHS), Playwright, WCAG 2.2 AA.\n`);
-  }
-  await writeFile(resolve(process.env.BOT_OUTPUT_FILE || 'bot-implementation.txt'), `${modelReply || 'Deterministic zero-cost implementation applied'}\n`);
+  assert(applied, 'Implementation model returned no usable file changes');
+  await writeFile(resolve(process.env.BOT_OUTPUT_FILE || 'bot-implementation.txt'), `${modelReply}\n`);
 }
 
 /**
@@ -878,7 +830,7 @@ async function freeRemediate() {
 }
 
 /**
- * Produces a validated specialist role review report combining deterministic checks with optional Gemini findings.
+ * Produces a deterministic role gate report. Human approval remains a separate merge requirement.
  */
 async function roleReview() {
   const role = process.env.BOT_REVIEW_ROLE;
@@ -909,40 +861,15 @@ async function roleReview() {
   } else if (role === 'ProductAgent') {
     if (paths.length === 0) deterministicFindings.push('No changed files in candidate');
   }
-  let geminiStatus = 'pass';
-  const geminiFindings = [];
-  const geminiEvidence = [];
-  const geminiOut = (process.env.GEMINI_REVIEW_OUTPUT || '').trim();
-  if (geminiOut) {
-    const match = geminiOut.match(/\{[\s\S]*\}/);
-    if (match) {
-      try {
-        const parsed = JSON.parse(match[0]);
-        if (['pass', 'fail'].includes(parsed.status) && Array.isArray(parsed.findings) && parsed.findings.every(x => typeof x === 'string')) {
-          geminiStatus = parsed.status;
-          geminiFindings.push(...parsed.findings);
-          if (Array.isArray(parsed.evidence) && parsed.evidence.every(x => typeof x === 'string')) {
-            geminiEvidence.push(...parsed.evidence);
-          }
-        } else {
-          geminiStatus = 'fail';
-          geminiFindings.push('Gemini review output did not match schema');
-        }
-      } catch (err) {
-        geminiStatus = 'fail';
-        geminiFindings.push(`Invalid Gemini JSON review output: ${err.message}`);
-      }
-    }
-  }
-  const findings = [...new Set([...deterministicFindings, ...geminiFindings])];
-  const evidence = [...new Set([...paths.slice(0, 25), ...geminiEvidence])];
-  const status = findings.length === 0 && geminiStatus === 'pass' ? 'pass' : 'fail';
-  const verdict = { status, headSha, findings, evidence };
+  const findings = [...new Set(deterministicFindings)];
+  const evidence = paths.slice(0, 25);
+  const status = findings.length === 0 ? 'pass' : 'fail';
+  const verdict = { status, headSha, findings, evidence, reviewType: 'automated-deterministic' };
   await mkdir(resolve(outFile, '..'), { recursive: true });
   await writeFile(outFile, `${JSON.stringify(verdict, null, 2)}\n`);
 }
 
-const handlers = { intake, branch: createBranch, 'task-context': taskContext, 'open-pr': openPr, 'merge-dev': mergeDev, policy: checkPolicy, quality, security, database, accessibility, evidence: evidenceGate, remediate, 'dev-health': devHealth, release, 'production-gate': productionGate, 'post-deployment-smoke': smoke, rollback, dependency, 'publish-patch': publishPatch, 'role-review': roleReview, 'free-implement': freeImplement, 'free-remediate': freeRemediate, 'merge-old-pr': mergeOldPr };
+const handlers = { intake, branch: createBranch, 'task-context': taskContext, 'open-pr': openPr, 'merge-dev': mergeDev, policy: checkPolicy, quality, security, database, accessibility, evidence: evidenceGate, remediate, 'dev-health': devHealth, release, 'production-gate': productionGate, 'post-deployment-smoke': smoke, rollback, dependency, 'publish-patch': publishPatch, 'role-review': roleReview, 'free-implement': freeImplement, 'free-remediate': freeRemediate };
 try {
   assert(command in handlers, `Unknown bot command: ${command}`);
   await handlers[command](await event());

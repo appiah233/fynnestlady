@@ -104,9 +104,9 @@ jobs:
           if [ "$INSPECT_RESULT" = "success" ] && [ "$failed" -eq 0 ]; then
             event="APPROVE"
             {
-              echo "## ✅ Fynnestlady Engineering Bot Review: Approved"
+              echo "## ✅ Fynnestlady Engineering Bot Review: Checks Passed"
               echo
-              echo "**Verdict:** ✅ **APPROVED** — All platform safety, architecture, authentication, database, and verification checks passed without harming the platform."
+              echo "**Verdict:** ✅ **CHECKS PASSED** — Automated verification passed for this commit. Independent approval and branch protection still govern merging."
               echo
               echo "Commit: \`$HEAD_SHA\`"
               echo
@@ -175,7 +175,6 @@ jobs:
         if: ${{ steps.app.outputs.token != '' }}
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
-          EVENT: ${{ steps.build.outputs.event }}
         shell: bash
         run: |
           set -euo pipefail
@@ -187,25 +186,19 @@ jobs:
             exit 0
           fi
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
-            -f commit_id="$HEAD_SHA" -f event="$EVENT" -F body=@review.md || \
-          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
             -f commit_id="$HEAD_SHA" -f event="COMMENT" -F body=@review.md
 
-      - name: Dispatch protected merge controller after exact-head approval
-        if: ${{ steps.build.outputs.event == 'APPROVE' && steps.app.outputs.token != '' }}
+      - name: Dispatch protected merge controller after successful final review
+        if: ${{ steps.build.outputs.event == 'APPROVE' && steps.app.outputs.token != '' && github.event.pull_request.base.ref == 'dev' }}
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
-          approvals=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews?per_page=100" --paginate \
-            --jq "[.[] | select(.user.login == \"$BOT_LOGIN\" and .commit_id == \"$HEAD_SHA\" and .state == \"APPROVED\")] | length" \
-            | awk '{ s += $1 } END { print s + 0 }')
-          if [ "$approvals" -lt 1 ]; then
-            echo "No Engineering Bot approval for current head $HEAD_SHA; merge dispatch withheld."
-            exit 1
-          fi
           payload=$(jq -cn --arg pr_number "$PR_NUMBER" '{ref: "dev", inputs: {pr_number: $pr_number}}')
           gh api "repos/$GITHUB_REPOSITORY/actions/workflows/bot-merge-dev.yml/dispatches" \
             --method POST --input - <<< "$payload"
-          echo "Dispatched the protected merge controller for PR #$PR_NUMBER after exact-head approval."
+          echo "Dispatched the protected merge controller for PR #$PR_NUMBER after final review."
+      - name: Fail final review when findings remain
+        if: ${{ steps.build.outputs.event == 'REQUEST_CHANGES' }}
+        run: exit 1
