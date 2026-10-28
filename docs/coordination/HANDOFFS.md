@@ -120,3 +120,27 @@ Blockers: Required CI and independent review.
 Decisions required: None for this bounded visual update.
 Next owner: Eric Appiah Owusu for design direction; independent reviewer for PR acceptance.
 Next action: Review the PR preview and required checks; merge to dev only through protected governance.
+
+## 2026-10-28T16:04:00Z Codex — PR #55 release conflict resolution
+
+Task ID: PR-55-RELEASE-CONFLICTS / issue #56
+Branch: fix/56-release-sync
+Completed: Merged the existing main release history into a branch from dev. Resolved the two coordination-file conflicts by retaining the dev-only issue #53 entries and all common history.
+Evidence: Git merge identified only ACTIVE_WORK.md and HANDOFFS.md as conflicts; reviewed both conflict regions.
+Tests: No test suite run. Conflict marker and diff hygiene inspection to follow; automated PR CI will evaluate the merge.
+Risks: Release PR #55 remains under its normal main review and production gates. The sync PR must use a merge commit through protected dev; a squash merge would not preserve main ancestry and would leave #55 conflicted.
+Blockers: Required CI and independent review of the sync PR.
+Decisions required: None for this non-destructive history sync.
+Next owner: Eric Appiah Owusu for the exceptional merge-commit choice after independent review; owner for the release hold.
+Next action: Merge the sync PR into dev with GitHub's merge-commit method after checks and review, then recheck PR #55 mergeability.
+
+## 2026-10-28T17:08:00Z Codex — PR #57 inspection correction
+
+Task ID: PR-55-RELEASE-CONFLICTS / issue #56
+Branch: fix/56-release-sync
+Completed: Corrected PR #57's required evidence headings after its first automated inspection failed; the next inspection passed. A fresh coordination commit is needed because the final bot review still reads the old failed check on the same head SHA.
+Evidence: GitHub Actions inspection run 40732094808 succeeded; final review on that head listed the earlier failed inspection from run 40731810904.
+Tests: No local test suite run.
+Risks: PR #57 remains draft until the exceptional merge-commit path is reviewed.
+Next owner: Eric Appiah Owusu after fresh CI.
+Next action: Review fresh checks, then use the merge-commit method on PR #57 before returning to release PR #55.
