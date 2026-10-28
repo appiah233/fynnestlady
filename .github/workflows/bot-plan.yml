@@ -87,7 +87,21 @@ jobs:
       - name: Require planning output
         run: |
           test -s bot-plan/bot-plan.txt
-          node -e "const s=require('fs').readFileSync('bot-plan/bot-plan.txt','utf8').trim();let decision;try{decision=JSON.parse(s).decision}catch{decision=/^decision:\s*(READY|BLOCKED)\s*$/m.exec(s)?.[1]}if(decision!=='READY')process.exit(1)"
+          node <<'NODE'
+          const s = require('fs').readFileSync('bot-plan/bot-plan.txt', 'utf8').trim();
+          let decision;
+          if (s.startsWith('{')) {
+            const keys = s.match(/"decision"\s*:/g) || [];
+            if (keys.length !== 1) process.exit(1);
+            try { decision = JSON.parse(s).decision; } catch { process.exit(1); }
+          } else {
+            const records = [...s.matchAll(/^decision:\s*(READY|BLOCKED)\s*$/gm)];
+            const allKeys = [...s.matchAll(/^\s*decision\s*:/gm)];
+            if (records.length !== 1 || allKeys.length !== 1) process.exit(1);
+            decision = records[0][1];
+          }
+          if (decision !== 'READY') process.exit(1);
+          NODE
       - name: Mint GitHub App token (when configured)
         if: ${{ vars.FYNNESTLADY_USE_GITHUB_APP == 'true' }}
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349

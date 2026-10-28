@@ -2,7 +2,7 @@ name: Production gate
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -48,8 +48,25 @@ jobs:
           sha="$(jq -r '.head.sha' <<< "$pr")"
           test "$base" = main && test "$head_ref" = dev && test "$head_repo" = "$GITHUB_REPOSITORY"
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
-          run_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/evidence-publisher.yml/runs?head_sha=$sha&status=completed&per_page=100" --jq '.workflow_runs | map(select(.conclusion == "success" and .event == "pull_request")) | .[0].id')"
-          [[ "$run_id" =~ ^[0-9]+$ ]]
+          body="$(jq -r '.body // ""' <<< "$pr")"
+          [[ "$body" =~ ([Rr]efs?|[Cc]loses?|[Ff]ixes?|[Rr]esolves?)[[:space:]]+#[0-9]+ ]] || {
+            echo '::error::Release PR must reference an issue before evidence can be accepted.'
+            exit 1
+          }
+          deadline=$((SECONDS + 900))
+          while true; do
+            run="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/evidence-publisher.yml/runs?head_sha=$sha&event=pull_request&per_page=100" \
+              --jq ".workflow_runs | map(select(any(.pull_requests[]?; .number == $BOT_PR_NUMBER))) | sort_by(.id) | last | {id, status, conclusion}")"
+            run_id="$(jq -r '.id // empty' <<< "$run")"
+            status="$(jq -r '.status // empty' <<< "$run")"
+            conclusion="$(jq -r '.conclusion // empty' <<< "$run")"
+            if [[ "$run_id" =~ ^[0-9]+$ ]] && [ "$status" = completed ]; then
+              test "$conclusion" = success || { echo '::error::Latest release evidence run did not succeed.'; exit 1; }
+              break
+            fi
+            [ "$SECONDS" -lt "$deadline" ] || { echo '::error::Timed out waiting for current release evidence.'; exit 1; }
+            sleep 15
+          done
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
       - name: Check out candidate release branch as data

@@ -49,7 +49,7 @@ The platform is engineered using modern, production-grade cloud, web, and databa
 ### Quality Assurance & Testing
 - **Node.js Test Runner (`node --test`):** Automated deterministic test suite verifying public configuration, platform safety, quality gates, and architecture policies.
 - **[Playwright](https://playwright.dev/):** End-to-end browser verification validating navigation and keyboard accessibility across 7 representative device widths (320px, 375px, 390px, 430px, 768px, 1024px, 1440px).
-- **ESLint & Prettier:** Automated code hygiene, formatting, and linting.
+- **ESLint:** Automated code hygiene and linting.
 
 ### Governance, CI/CD & Deployment
 - **[GitHub Actions](https://github.com/features/actions):** Automated pipelines running CodeQL security analysis, dependency vulnerability reviews, accessibility audits, secret scanning, and evidence gates.

@@ -69,7 +69,7 @@ function ShopPageContent({ products: catalogue }: { products: Product[] }) {
   const skinType = searchParams.get("skinType") as SkinType | null;
   const availability = searchParams.get("availability") || undefined;
   const sort = (searchParams.get("sort") as SortOption) ?? "featured";
-  const page = Math.max(parseInt(searchParams.get("page") || "1", 10), 1);
+  const page = Math.max(Number.parseInt(searchParams.get("page") ?? "", 10) || 1, 1);
 
   let products = [...catalogue];
 
