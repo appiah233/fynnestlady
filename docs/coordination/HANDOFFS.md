@@ -93,3 +93,16 @@ Blockers: A one-time owner-authorized controller bootstrap is needed if required
 Decisions required: Whether to authorize a one-time admin merge of PR #50 for controller bootstrap if its sole failing required gate is the old Gemini check.
 Next owner: Eric Appiah Owusu for the controller bootstrap decision; Codex for subsequent CI reruns and findings.
 Next action: Inspect current PR #50 check results; once the trusted controller reaches dev, rerun evidence for PR #46, PR #50 if still open, and release PR #47.
+
+## 2026-10-28T14:49:48Z Codex — issue #51 review follow-up
+
+Task ID: PR-47-REVIEW-FOLLOWUP
+Branch: fix/51-release-review-followup
+Scope: Align production-gate issue-reference forms with the evidence publisher and read every PR-review page before merge decisions.
+Completed: Code changes prepared and static syntax/YAML checks passed.
+Evidence: Release PR #47 CodeRabbit threads 4402007897 and 4402007924; git diff and commit to follow.
+Tests: No local test suite run; required CI will validate the PR.
+Risks: Production gate remains disabled, so its updated issue parser cannot be exercised in a production release here. Merge controller retains exact-head and trusted human requirements.
+Blockers: Required CI and independent owner review of the follow-up PR.
+Next owner: Eric Appiah Owusu for review; Engineering Bot for eligible protected dev merge.
+Next action: Open follow-up PR, inspect its gates, then update release PR #47 after integration.

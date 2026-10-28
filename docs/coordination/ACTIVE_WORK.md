@@ -112,3 +112,17 @@ Status: In progress.
 Branch: fix/47-release-feedback
 Status: No-key evidence controller implemented in PR #50; required CI pending. Trusted dev controller remains the bootstrap dependency.
 Next action: Inspect all current required checks and request a one-time owner decision only if the old Gemini gate is the sole blocker.
+
+## 2026-10-28T14:49:48Z Codex — PR-47-REVIEW-FOLLOWUP
+
+Task ID: PR-47-REVIEW-FOLLOWUP / issue #51
+Branch: fix/51-release-review-followup
+Role: Engineering control-plane maintainer
+Objective: Address two current CodeRabbit findings on release PR #47 after the no-key controller reached dev.
+Business outcome: Preserve consistent issue traceability and reliable independent-review eligibility under the Building Memo.
+Scope: Production-gate issue syntax and complete merge-controller PR review pagination.
+Non-goals: Production promotion, branch protection changes, and unrelated application behavior.
+Files expected: .github/workflows/production-gate.yml, scripts/bot.mjs, coordination records.
+Dependencies: PR #47, existing production hold and owner review, required checks on follow-up PR.
+Conflicts checked: PR #50 merged into dev at 3ccbdbb; this branch starts from that commit. Existing CodeRabbit threads 4402007897 and 4402007924 track these findings.
+Status: Implementation in progress.
