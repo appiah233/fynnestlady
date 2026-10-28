@@ -41,12 +41,12 @@ jobs:
             prompt: test-verification.md
     steps:
       - name: Check out trusted prompts and schema
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: dev
           persist-credentials: false
       - name: Check out reviewed head as data
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: candidate
@@ -80,7 +80,7 @@ jobs:
             node candidate/scripts/bot.mjs role-review
           fi
           node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync(process.env.BOT_REVIEW_FILE,'utf8'));if(!['pass','fail'].includes(x.status)||x.headSha!==process.env.BOT_HEAD_SHA||!Array.isArray(x.findings)||!Array.isArray(x.evidence))process.exit(1)"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: role-${{ matrix.role }}
           path: reviews/${{ matrix.role }}.json
@@ -92,18 +92,18 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out trusted evidence assembler
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: dev
           persist-credentials: false
       - name: Check out exact reviewed head
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: candidate
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: role-*
           path: reviews
@@ -182,7 +182,7 @@ jobs:
           else
             node candidate/scripts/bot.mjs evidence
           fi
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: bot-evidence
           path: bot-evidence.json

@@ -24,13 +24,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: dev
           persist-credentials: false
       - name: Mint GitHub App token (when configured)
         if: ${{ vars.FYNNESTLADY_USE_GITHUB_APP == 'true' }}
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
         id: app
         with:
           app-id: ${{ secrets.FYNNESTLADY_APP_ID }}
