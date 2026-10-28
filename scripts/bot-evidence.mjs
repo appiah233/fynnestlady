@@ -44,7 +44,7 @@ try {
       value.evidence.some(x => typeof x !== 'string')
     ) throw new Error(`Invalid ${role} review`);
     if (value.status !== 'pass') throw new Error(`${role} blocked: ${value.findings.join('; ')}`);
-    reviews[role] = { status: 'pass', headSha: value.headSha, findings: value.findings, evidence: value.evidence };
+    reviews[role] = { status: 'pass', headSha: value.headSha, findings: value.findings, evidence: value.evidence, reviewType: value.reviewType || 'legacy' };
   }
   const manifest = {
     headSha,
@@ -58,7 +58,7 @@ try {
   if (!verdict.ok) throw new Error(verdict.reasons.join('; '));
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`);
-  process.stdout.write(`Evidence assembled for ${headSha} with ${roles.length} independent role reports\n`);
+  process.stdout.write(`Evidence assembled for ${headSha} with ${roles.length} automated role reports\n`);
 } catch (error) {
   process.stderr.write(`Evidence assembly failed: ${error.message}\n`);
   process.exitCode = 1;
