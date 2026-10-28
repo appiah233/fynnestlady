@@ -345,7 +345,14 @@ async function mergeDev(e) {
   }
   const rawReviews = await api(`pulls/${number}/reviews?per_page=100`);
   const botLogin = `${process.env.FYNNESTLADY_APP_SLUG || 'fynnestlady-engineering-bot'}[bot]`;
-  const independentApproval = rawReviews.some(review => review.user?.login !== botLogin && review.user?.login !== pr.user?.login && review.commit_id === pr.head.sha && review.state === 'APPROVED');
+  const trustedAssociations = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+  const independentApproval = rawReviews.some(review =>
+    review.user?.type !== 'Bot' &&
+    review.user?.login !== botLogin &&
+    review.user?.login !== pr.user?.login &&
+    trustedAssociations.has(review.author_association) &&
+    review.commit_id === pr.head.sha &&
+    review.state === 'APPROVED');
   if (checks['Bot final review'] !== 'success' || !independentApproval) {
     process.stdout.write(`Merge deferred for PR #${number}: final review check and independent approval are required for ${pr.head.sha}\n`);
     await output('merge_deferred', 'awaiting-independent-review');
@@ -800,7 +807,7 @@ async function freeRemediate() {
 }
 
 /**
- * Produces a validated specialist role review report combining deterministic checks with optional Gemini findings.
+ * Produces a deterministic role gate report. Human approval remains a separate merge requirement.
  */
 async function roleReview() {
   const role = process.env.BOT_REVIEW_ROLE;
@@ -831,38 +838,10 @@ async function roleReview() {
   } else if (role === 'ProductAgent') {
     if (paths.length === 0) deterministicFindings.push('No changed files in candidate');
   }
-  let geminiStatus = 'fail';
-  const geminiFindings = [];
-  const geminiEvidence = [];
-  const geminiOut = (process.env.GEMINI_REVIEW_OUTPUT || '').trim();
-  if (!geminiOut) geminiFindings.push('Independent specialist review output is missing');
-  if (geminiOut) {
-    const match = geminiOut.match(/\{[\s\S]*\}/);
-    if (match) {
-      try {
-        const parsed = JSON.parse(match[0]);
-        if (['pass', 'fail'].includes(parsed.status) && Array.isArray(parsed.findings) && parsed.findings.every(x => typeof x === 'string')) {
-          geminiStatus = parsed.status;
-          geminiFindings.push(...parsed.findings);
-          if (Array.isArray(parsed.evidence) && parsed.evidence.every(x => typeof x === 'string')) {
-            geminiEvidence.push(...parsed.evidence);
-          }
-        } else {
-          geminiStatus = 'fail';
-          geminiFindings.push('Gemini review output did not match schema');
-        }
-      } catch (err) {
-        geminiStatus = 'fail';
-        geminiFindings.push(`Invalid Gemini JSON review output: ${err.message}`);
-      }
-    } else {
-      geminiFindings.push('Independent specialist review output is not JSON');
-    }
-  }
-  const findings = [...new Set([...deterministicFindings, ...geminiFindings])];
-  const evidence = [...new Set([...paths.slice(0, 25), ...geminiEvidence])];
-  const status = findings.length === 0 && geminiStatus === 'pass' ? 'pass' : 'fail';
-  const verdict = { status, headSha, findings, evidence };
+  const findings = [...new Set(deterministicFindings)];
+  const evidence = paths.slice(0, 25);
+  const status = findings.length === 0 ? 'pass' : 'fail';
+  const verdict = { status, headSha, findings, evidence, reviewType: 'automated-deterministic' };
   await mkdir(resolve(outFile, '..'), { recursive: true });
   await writeFile(outFile, `${JSON.stringify(verdict, null, 2)}\n`);
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useTransition } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { X } from "lucide-react";
@@ -61,7 +61,7 @@ function ShopPageContent({ products: catalogue }: { products: Product[] }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const [loading, setLoading] = useState(false);
+  const [loading, startTransition] = useTransition();
 
   const view = searchParams.get("view") === "concern" ? "concern" : "products";
   const concern = searchParams.get("concern") as ProductConcern | null;
@@ -69,7 +69,7 @@ function ShopPageContent({ products: catalogue }: { products: Product[] }) {
   const skinType = searchParams.get("skinType") as SkinType | null;
   const availability = searchParams.get("availability") || undefined;
   const sort = (searchParams.get("sort") as SortOption) ?? "featured";
-  const page = Math.max(parseInt(searchParams.get("page") || "1", 10), 1);
+  const page = Math.max(Number.parseInt(searchParams.get("page") ?? "", 10) || 1, 1);
 
   let products = [...catalogue];
 
@@ -129,9 +129,9 @@ function ShopPageContent({ products: catalogue }: { products: Product[] }) {
     if (value) params.set(key, value);
     else params.delete(key);
     if (key !== "view") params.set("page", "1");
-    setLoading(true);
-    router.replace(`${pathname}?${params.toString()}`);
-    setLoading(false);
+    startTransition(() => {
+      router.replace(`${pathname}?${params.toString()}`);
+    });
   };
 
   const clearAllFilters = () => {

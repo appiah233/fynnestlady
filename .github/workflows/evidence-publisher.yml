@@ -28,19 +28,13 @@ jobs:
       matrix:
         include:
           - role: ArchitectAgent
-            prompt: architecture-review.md
           - role: ProductAgent
-            prompt: product-review.md
           - role: DatabaseAgent
-            prompt: database-review.md
           - role: SecurityAgent
-            prompt: security-review.md
           - role: DesignAgent
-            prompt: design-review.md
           - role: TestingAgent
-            prompt: test-verification.md
     steps:
-      - name: Check out trusted prompts and schema
+      - name: Check out trusted review controller
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: dev
@@ -54,25 +48,12 @@ jobs:
           persist-credentials: false
       - name: Prepare review output
         run: mkdir -p reviews
-      - name: Independent ${{ matrix.role }} review (Gemini CLI free tier when key configured)
-        id: gemini_review
-        if: ${{ vars.FYNNESTLADY_USE_GEMINI_API == 'true' }}
-        uses: google-github-actions/run-gemini-cli@v0
-        with:
-          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
-          prompt: |
-            Inspect the candidate tree in ./candidate in read-only mode. Follow .github/codex/prompts/${{ matrix.prompt }} and output ONLY a valid JSON object matching .github/fynnestlady/review-schema.json ({"status": "pass"|"fail", "findings": ["..."]}).
-          settings: |
-            {
-              "telemetry": { "enabled": false }
-            }
-      - name: Produce and validate structured ${{ matrix.role }} verdict
+      - name: Produce and validate deterministic ${{ matrix.role }} verdict
         env:
           BOT_REVIEW_ROLE: ${{ matrix.role }}
           BOT_REVIEW_FILE: ${{ github.workspace }}/reviews/${{ matrix.role }}.json
           BOT_TARGET_DIR: ${{ github.workspace }}/candidate
           BOT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          GEMINI_REVIEW_OUTPUT: ${{ steps.gemini_review.outputs.summary }}
         run: |
           if [ -f scripts/bot.mjs ]; then
             node scripts/bot.mjs role-review

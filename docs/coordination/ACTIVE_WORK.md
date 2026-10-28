@@ -1,5 +1,20 @@
 # Active Work
 
+## 2026-10-28T14:24:57Z Codex
+
+Task ID: PR-47-NO-GEMINI-EVIDENCE
+Branch: fix/47-release-feedback
+Role: Engineering control-plane maintainer
+Objective: Remove the unavailable Gemini API dependency from PR evidence after the owner's explicit instruction, while preserving deterministic gates and protected merges.
+Business outcome: Restore a usable review and release path without requiring an API key, consistent with the Building Memo's correctness and evidence requirements.
+Scope: Evidence workflow, trusted role verdicts, governance decision and coordination records, PR #50.
+Non-goals: Production deployment, direct branch pushes, fabricated model reviews, and disabling other required checks.
+Files expected: .github/workflows/evidence-publisher.yml, scripts/bot.mjs, scripts/bot-evidence.mjs, docs/architecture/ADR/ADR-014-engineering-bot.md, docs/coordination/DECISIONS.md, docs/coordination/HANDOFFS.md.
+Dependencies: Owner review of governance exception; required checks; GitHub protection on dev and main.
+Conflicts checked: PR #50 owns the review fixes; current dev controller requires Gemini output and must be updated before its evidence gate can pass.
+Status: In progress.
+
+
 ## 2026-10-26T17:04:34Z FynnestladyEngineeringBot
 
 Task ID: SPRINT-1-INTEGRATION
@@ -91,3 +106,9 @@ Files expected: package.json, lockfile, next/TypeScript/Tailwind configuration, 
 Dependencies: DesignAgent globals.css and primitives; DatabaseAgent schema contracts.
 Conflicts checked: Isolated worktree from dev; DesignAgent owns globals.css, primitives, brand assets.
 Status: In progress.
+
+## 2026-10-28T14:29:04Z Codex — PR-47-NO-GEMINI-EVIDENCE checkpoint
+
+Branch: fix/47-release-feedback
+Status: No-key evidence controller implemented in PR #50; required CI pending. Trusted dev controller remains the bootstrap dependency.
+Next action: Inspect all current required checks and request a one-time owner decision only if the old Gemini gate is the sole blocker.

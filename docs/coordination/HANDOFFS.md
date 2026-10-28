@@ -79,3 +79,17 @@ Blockers: Independent TestingAgent and SecurityAgent review; repository-wide dep
 Decisions required: None for this bounded foundation.
 Next owner: Fynnestlady Engineering Bot for PR and integration; TestingAgent for independent verification.
 Next action: Integrate DesignAgent branch and rerun build, typecheck, tests, security bundle scan.
+
+## 2026-10-28T14:29:04Z Codex — PR #50 no-key evidence controller
+
+Task ID: PR-47-NO-GEMINI-EVIDENCE
+Branch: fix/47-release-feedback
+Status: Implementation pushed; bootstrap merge into dev pending.
+Completed: Removed Gemini from evidence workflow, made role reports explicitly deterministic, recorded owner decision, preserved human review and production hold.
+Evidence: Commit 6c5a90f; PR #50; node syntax checks, YAML parse, and git diff check passed. Required CI runs for the new head are pending.
+Tests: No local test suite run; CI validation is pending.
+Risks: Trusted evidence controller is loaded from dev, so PR #50's own evidence gate still uses the old Gemini requirement until the controller reaches dev. Automated deterministic role checks have less coverage than a model review; a trusted human review remains mandatory for merge.
+Blockers: A one-time owner-authorized controller bootstrap is needed if required evidence-gate blocks the PR, after all other required gates pass. Main release remains under the production hold and code-owner review.
+Decisions required: Whether to authorize a one-time admin merge of PR #50 for controller bootstrap if its sole failing required gate is the old Gemini check.
+Next owner: Eric Appiah Owusu for the controller bootstrap decision; Codex for subsequent CI reruns and findings.
+Next action: Inspect current PR #50 check results; once the trusted controller reaches dev, rerun evidence for PR #46, PR #50 if still open, and release PR #47.
