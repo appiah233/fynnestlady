@@ -1,5 +1,19 @@
 # Active Work
 
+## 2026-10-28T16:02:00Z Codex — PR-55-RELEASE-CONFLICTS
+
+Task ID: PR-55-RELEASE-CONFLICTS / issue #56
+Branch: fix/56-release-sync
+Role: Release branch coordination
+Objective: Bring merged main history back into dev so release PR #55 can compare without coordination-file conflicts.
+Business outcome: Restore a reviewable dev-to-main release path while preserving the Building Memo's protected branch governance.
+Scope: Merge origin/main into a branch from origin/dev and preserve both coordination histories.
+Non-goals: Direct push to dev/main, release merge, production deployment, or unrelated code changes.
+Files expected: docs/coordination/ACTIVE_WORK.md and docs/coordination/HANDOFFS.md.
+Dependencies: PR #47 already merged to main; PR #54 already merged to dev; protected PR review for this sync.
+Conflicts checked: Only the two coordination files conflict; main has no entries in the conflicting regions, so dev entries are retained.
+Status: Two coordination conflicts resolved; reviewed merge-commit PR pending.
+
 ## 2026-10-28T15:42:00Z Codex — REFERENCE-HOMEPAGE
 
 Task ID: REFERENCE-HOMEPAGE / issue #53
