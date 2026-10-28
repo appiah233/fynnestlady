@@ -11,7 +11,7 @@
       "issue": null,
       "branch": null,
       "branchTemplate": "security/{issue}-authentication",
-      "scope": "Supabase Auth, sessions, recovery, server authorization",
+      "scope": "Clerk identity, sessions, recovery, server authorization",
       "status": "queued",
       "dependencies": ["S1-DATA", "S1-SEC", "S1-TEST"],
       "filesOwned": ["src/server/auth/**", "src/app/(auth)/**", "tests/security/**"],

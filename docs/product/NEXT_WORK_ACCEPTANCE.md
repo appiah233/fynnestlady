@@ -8,7 +8,7 @@ Authentication, catalogue read contracts, and reviewed storefront shell can begi
 
 ## Authentication — SecurityAgent
 
-Outcome: a customer can create and recover an account and maintain a secure session through Supabase Auth.
+Outcome: a customer can create and recover an account and maintain a secure session through Clerk.
 
 Acceptance:
 
@@ -71,7 +71,7 @@ Acceptance:
 
 - Profile and address changes require a current authenticated session and server authorization; cross-customer read/write attempts fail.
 - Order history and detail show immutable purchase-time snapshots and verified status, with clear empty and failure states.
-- Password and session actions use Supabase Auth contracts; sensitive changes do not expose tokens in UI or logs.
+- Password and session actions use Clerk contracts; sensitive changes do not expose tokens in UI or logs.
 - Account navigation, forms, focus, error text, 200% reflow, and seven widths pass DesignAgent and TestingAgent review.
 
 Dependency: authentication, address model, order read contract, and approved data-retention/privacy requirements. Order history can be built against test fixtures but cannot claim complete checkout behavior before payment verification.

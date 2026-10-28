@@ -20,7 +20,7 @@ The first migration establishes only the records needed to define catalogue, car
 | Authenticated customer | Active catalogue and own profile, cart, orders, order items | None in this foundation |
 | Trusted server with service role | All, subject to application authorization | Commerce transactions only |
 
-The server must verify a customer's identity and resource ownership before using the service role; service role bypasses RLS. Never expose it to the browser. Admin authority must be checked server-side against a separate role model, not user-editable metadata. Payments must be independently verified before setting success. Redirect parameters are not payment evidence.
+The server must verify a customer's identity and resource ownership before using the service role; service role bypasses RLS. Never expose it to the browser. Customer clients pass a Clerk session token through Supabase's third-party Clerk integration, and RLS matches its verified `sub` claim to `clerk_user_id`. Configure the Clerk integration in both dashboards before customer access; UUID-only legacy rows remain invisible until migrated to verified Clerk ownership. Admin authority must be checked server-side against a separate role model, not user-editable metadata. Payments must be independently verified before setting success. Redirect parameters are not payment evidence.
 
 ## Dependencies and follow-up
 
@@ -30,4 +30,4 @@ Migrations are additive. The second migration adds a private admin-membership ta
 
 ## Independent local SQL check
 
-`tests/database.test.mjs` requires a fresh disposable local PostgreSQL database, `DATABASE_TEST_URL` pointing at a database named with `test` or `fixture`, and `FYNNESTLADY_DATABASE_TEST_DISPOSABLE=1`. It applies the Auth stub, all timestamped migrations, and `supabase/tests/domain_foundation.sql` with `psql -X -v ON_ERROR_STOP=1`. The Auth stub must never be applied to Supabase. The assertion suite rolls back its fixtures. Without `DATABASE_TEST_URL` the general test run records this check as skipped; the bot database gate requires that variable and fails closed. A real local Supabase verification is still required for platform-specific behavior.
+`tests/database.test.mjs` requires a fresh disposable local PostgreSQL database, `DATABASE_TEST_URL` pointing at a database named with `test` or `fixture`, and `FYNNESTLADY_DATABASE_TEST_DISPOSABLE=1`. It applies the Auth stub, all timestamped migrations, and `supabase/tests/domain_foundation.sql` with `psql -X -v ON_ERROR_STOP=1`. The Auth stub must never be applied to Supabase. The assertion suite rolls back its fixtures. Without `DATABASE_TEST_URL` the general test run records this check as skipped; the bot database gate requires that variable and fails closed. This local test supplies simulated JWT claims to check RLS only; a real Clerk-signed token against a configured Supabase project must be verified before customer access is released.
