@@ -12,7 +12,7 @@ Non-goals: Direct push to dev/main, release merge, production deployment, or unr
 Files expected: docs/coordination/ACTIVE_WORK.md and docs/coordination/HANDOFFS.md.
 Dependencies: PR #47 already merged to main; PR #54 already merged to dev; protected PR review for this sync.
 Conflicts checked: Only the two coordination files conflict; main has no entries in the conflicting regions, so dev entries are retained.
-Status: Two coordination conflicts resolved; reviewed merge-commit PR pending.
+Status: Two coordination conflicts resolved in draft PR #57. Required merge-commit review pending; PR metadata corrected for inspection.
 
 ## 2026-10-28T15:42:00Z Codex — REFERENCE-HOMEPAGE
 
