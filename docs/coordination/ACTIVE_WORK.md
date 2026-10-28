@@ -106,3 +106,9 @@ Files expected: package.json, lockfile, next/TypeScript/Tailwind configuration, 
 Dependencies: DesignAgent globals.css and primitives; DatabaseAgent schema contracts.
 Conflicts checked: Isolated worktree from dev; DesignAgent owns globals.css, primitives, brand assets.
 Status: In progress.
+
+## 2026-10-28T14:29:04Z Codex — PR-47-NO-GEMINI-EVIDENCE checkpoint
+
+Branch: fix/47-release-feedback
+Status: No-key evidence controller implemented in PR #50; required CI pending. Trusted dev controller remains the bootstrap dependency.
+Next action: Inspect all current required checks and request a one-time owner decision only if the old Gemini gate is the sole blocker.
