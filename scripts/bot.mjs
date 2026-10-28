@@ -345,7 +345,14 @@ async function mergeDev(e) {
   }
   const rawReviews = await api(`pulls/${number}/reviews?per_page=100`);
   const botLogin = `${process.env.FYNNESTLADY_APP_SLUG || 'fynnestlady-engineering-bot'}[bot]`;
-  const independentApproval = rawReviews.some(review => review.user?.login !== botLogin && review.user?.login !== pr.user?.login && review.commit_id === pr.head.sha && review.state === 'APPROVED');
+  const trustedAssociations = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+  const independentApproval = rawReviews.some(review =>
+    review.user?.type !== 'Bot' &&
+    review.user?.login !== botLogin &&
+    review.user?.login !== pr.user?.login &&
+    trustedAssociations.has(review.author_association) &&
+    review.commit_id === pr.head.sha &&
+    review.state === 'APPROVED');
   if (checks['Bot final review'] !== 'success' || !independentApproval) {
     process.stdout.write(`Merge deferred for PR #${number}: final review check and independent approval are required for ${pr.head.sha}\n`);
     await output('merge_deferred', 'awaiting-independent-review');
